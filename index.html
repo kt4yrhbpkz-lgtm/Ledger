@@ -6,6 +6,23 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Ledger" />
 <meta name="theme-color" content="#FAF7F0" />
+<script>
+  // Runs before anything else paints, so the status-bar-area color and the
+  // dark/light attribute are both correct from the very first frame — fixes
+  // a visible seam between the phone's status bar and the app's own header
+  // that happened because the meta tag only used to update after React's
+  // first render (i.e. after the page had already painted once with the
+  // wrong, hardcoded light-theme color).
+  (function () {
+    try {
+      var theme = localStorage.getItem('ledger:theme') || 'light';
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0f1117');
+      }
+    } catch (e) {}
+  })();
+</script>
 <title>Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -194,9 +211,17 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.9.0';
+var APP_VERSION = '1.9.2';
 
 var CHANGELOG = [
+  { version: '1.9.2', notes: [
+    'Corrigido um bug real de dados: duas transações genuinamente diferentes no mesmo dia, com o mesmo valor e descrição (ex: dois cafés no mesmo local), podiam colidir e ser tratadas como duplicado, perdendo uma delas ao importar',
+    'Otimização: os gráficos de linha já não recriam o seu gradiente em cada novo fotograma durante o gesto de arrastar, tornando a interação mais fluida',
+    'Limpeza de código: removido um componente e uma variável que já não eram utilizados em lado nenhum',
+  ]},
+  { version: '1.9.1', notes: [
+    'Corrigido: ao abrir a app no tema escuro, a área da barra de estado do telemóvel aparecia por breves instantes com a cor clara antes de mudar para escuro, criando uma costura visível',
+  ]},
   { version: '1.9.0', notes: [
     'Revertido o visual "vidro" introduzido na vers\u00e3o anterior \u2014 Resumo e Tend\u00eancias voltam ao estilo s\u00f3lido habitual',
     'Corrigido: deslizar para mudar de m\u00eas estava a fazer o ecr\u00e3 inteiro deslizar/saltar (a app já não deixa o gesto interferir com o scroll nativo)',
@@ -282,6 +307,8 @@ var FAQ_ITEMS = [
     a: 'Tocar em qualquer um deles filtra a lista de transações abaixo para mostrar apenas esse tipo de movimento nesse mês \u2014 funcionam como os filtros do gráfico circular, mas para rendimentos e investimentos em vez de categorias de despesa. Tocar de novo remove o filtro.' },
   { q: 'Qual a diferença entre "Balance over time" e "Monthly net" em Tendências?',
     a: '"Balance over time" mostra o saldo real da tua conta bancária, tal como reportado no extrato CGD. "Monthly net" calcula rendimentos menos gastos em cada mês \u2014 não é o saldo da conta, mas sim o resultado financeiro desse mês isoladamente.' },
+  { q: 'Tinha duas transações iguais no mesmo dia e só aparecia uma. Porquê?',
+    a: 'Era um bug que foi corrigido. Antes desta correção, duas transações com a mesma data, o mesmo valor e a mesma descrição (por exemplo, dois cafés no mesmo café, no mesmo dia, ao mesmo preço) eram tratadas como uma duplicada da outra e só uma sobrevivia. A partir desta versão, cada transação recebe um identificador distinto mesmo nesse caso. Se suspeitas que perdeste alguma transação antiga por causa disto, basta reimportar o ficheiro CSV correspondente — a app vai adicionar o que estiver em falta sem duplicar o que já tens.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -341,6 +368,16 @@ function parseCGDCsv(text) {
   }
 
   var transactions = [];
+  // Tracks how many times we've already seen this exact (date, value-date,
+  // amount, description) combination *within this same parse*. Two genuinely
+  // separate transactions can share all of those fields (e.g. two coffees at
+  // the same place on the same day for the same price) — without this
+  // counter they'd generate the same id and silently collapse into one
+  // transaction during the merge step. Counting occurrences in order means
+  // re-uploading the identical file still produces the identical sequence
+  // of ids, so the existing dedup-on-reupload behavior is unaffected.
+  var occurrenceCounts = {};
+
   for (var j = headerIdx + 1; j < lines.length; j++) {
     var line = lines[j].trim();
     if (!line) continue;
@@ -351,9 +388,14 @@ function parseCGDCsv(text) {
     if (!dataMov || !montante) continue;
 
     var iso = parseDateStr(dataMov).iso;
+    var valorIso = dataValor ? parseDateStr(dataValor).iso : iso;
     var desc = descricao.trim();
     var amount = parseAmount(montante);
-    var id = (iso + '-' + amount + '-' + desc).replace(/\s+/g, '_');
+
+    var baseKey = (iso + '-' + valorIso + '-' + amount + '-' + desc).replace(/\s+/g, '_');
+    var occurrence = occurrenceCounts[baseKey] || 0;
+    occurrenceCounts[baseKey] = occurrence + 1;
+    var id = occurrence === 0 ? baseKey : baseKey + '-' + occurrence;
 
     transactions.push({
       id: id,
@@ -552,18 +594,6 @@ function UploadBox(props) {
   );
 }
 
-function CategoryBar(props) {
-  var category = props.category, amount = props.amount, max = props.max;
-  var pct = max > 0 ? (amount / max) * 100 : 0;
-  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 } },
-    h('span', { style: { flex: 1, color: 'var(--text)' } }, category),
-    h('span', { style: { flex: 2, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' } },
-      h('span', { style: { display: 'block', height: '100%', width: pct + '%', background: 'var(--accent)' } })
-    ),
-    h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", width: 90, textAlign: 'right', color: 'var(--text)' } }, formatEUR(amount))
-  );
-}
-
 function TransactionRow(props) {
   var tx = props.tx, onCategoryChange = props.onCategoryChange, categories = props.categories || ALL_CATEGORIES;
   var onCreateCategory = props.onCreateCategory;
@@ -657,6 +687,16 @@ function LineChart(props) {
   var width = 440;
   var padding = { top: 16, right: 8, bottom: 24, left: 44 };
 
+  // A stable random seed for this chart instance's gradient ids, generated
+  // once on mount rather than on every render — regenerating it per render
+  // (as a plain Math.random() call inline would) meant a brand new <defs>
+  // gradient got created on every touch-move during a drag, which is wasted
+  // work for something that never visually changes.
+  var instanceIdRef = useRef(null);
+  if (instanceIdRef.current === null) {
+    instanceIdRef.current = Math.round(Math.random() * 1e6);
+  }
+
   var allValues = [];
   series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
   var maxVal = Math.max.apply(null, allValues.concat([0]));
@@ -709,7 +749,7 @@ function LineChart(props) {
     var areaPath = points.length > 1
       ? linePath + ' L ' + points[points.length - 1].x + ' ' + (padding.top + innerH) + ' L ' + points[0].x + ' ' + (padding.top + innerH) + ' Z'
       : '';
-    return { name: s.name, color: color, points: points, linePath: linePath, areaPath: areaPath, gradientId: 'lg' + si + '_' + Math.round(Math.random() * 1e6) };
+    return { name: s.name, color: color, points: points, linePath: linePath, areaPath: areaPath, gradientId: 'lg' + si + '_' + instanceIdRef.current };
   });
 
   // --- Touch/drag crosshair --------------------------------------------
@@ -1139,7 +1179,6 @@ function OverviewScreen(props) {
   var summaryFilter = summaryFilterState[0], setSummaryFilter = summaryFilterState[1];
 
   var activeMonth = selectedMonth || data.months[0];
-  var activeMonthIdx = data.months.indexOf(activeMonth);
 
   // Changing month while a category filter is active would otherwise show a
   // filter label for a category that might not even exist in the new month —
@@ -1154,10 +1193,10 @@ function OverviewScreen(props) {
   // toward more recent months) moves to a LOWER index, and "swipe right"
   // (go back in time) moves to a HIGHER index.
   var goToAdjacentMonth = useCallback(function (direction) {
-    var idx = data.months.indexOf(selectedMonth || data.months[0]);
+    var idx = data.months.indexOf(activeMonth);
     var nextIdx = direction === 'newer' ? idx - 1 : idx + 1;
     if (nextIdx >= 0 && nextIdx < data.months.length) handleSelectMonth(data.months[nextIdx]);
-  }, [data.months, selectedMonth, handleSelectMonth]);
+  }, [data.months, activeMonth, handleSelectMonth]);
 
   var swipeRef = useRef(null);
   useEffect(function () {
