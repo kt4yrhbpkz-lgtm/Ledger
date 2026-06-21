@@ -211,9 +211,14 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.9.2';
+var APP_VERSION = '1.10.0';
 
 var CHANGELOG = [
+  { version: '1.10.0', notes: [
+    'Corrigido: a faixa de meses no Resumo estava a competir com o gesto de deslizar para mudar de mês, tornando-a difícil de deslizar manualmente',
+    'Ao mudar de mês (por gesto ou ao tocar num mês), a faixa de meses agora desloca-se automaticamente para manter o mês selecionado visível e centrado',
+    'A faixa de meses no Resumo é agora fixa no topo ao fazer scroll para baixo, para saberes sempre em que mês estás',
+  ]},
   { version: '1.9.2', notes: [
     'Corrigido um bug real de dados: duas transações genuinamente diferentes no mesmo dia, com o mesmo valor e descrição (ex: dois cafés no mesmo local), podiam colidir e ser tratadas como duplicado, perdendo uma delas ao importar',
     'Otimização: os gráficos de linha já não recriam o seu gradiente em cada novo fotograma durante o gesto de arrastar, tornando a interação mais fluida',
@@ -1199,6 +1204,7 @@ function OverviewScreen(props) {
   }, [data.months, activeMonth, handleSelectMonth]);
 
   var swipeRef = useRef(null);
+  var monthStripRef = useRef(null);
   useEffect(function () {
     var el = swipeRef.current;
     if (!el) return;
@@ -1208,6 +1214,14 @@ function OverviewScreen(props) {
     var AXIS_LOCK_THRESHOLD = 8; // px of movement before committing to an axis
 
     function onStart(e) {
+      // If the touch starts inside the month-pill strip, let it scroll
+      // natively — don't treat it as a month-change swipe at all. Without
+      // this, the page-level gesture's preventDefault() (below) fights with
+      // the strip's own horizontal scroll and makes it feel stuck.
+      if (monthStripRef.current && monthStripRef.current.contains(e.target)) {
+        startX = null;
+        return;
+      }
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       lockedAxis = null;
@@ -1246,6 +1260,19 @@ function OverviewScreen(props) {
       el.removeEventListener('touchend', onEnd);
     };
   }, [goToAdjacentMonth]);
+
+  // Whenever the active month changes (via swipe, or by tapping a different
+  // pill), make sure that pill is actually visible and centered in the strip
+  // — without this, swiping past the visible pills left the strip looking
+  // stuck, since only a manual tap on a pill ever scrolled the strip itself.
+  useEffect(function () {
+    var stripEl = monthStripRef.current;
+    if (!stripEl) return;
+    var activeEl = stripEl.querySelector('[data-month="' + activeMonth + '"]');
+    if (activeEl && activeEl.scrollIntoView) {
+      activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [activeMonth]);
 
   var monthTx = useMemo(function () {
     return data.categorized
@@ -1306,10 +1333,18 @@ function OverviewScreen(props) {
   }
 
   return h('div', { className: 'screen', ref: swipeRef },
-    h('div', { style: { display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 } },
+    h('div', {
+      ref: monthStripRef,
+      style: {
+        display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 4,
+        position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg)', paddingTop: 4, marginTop: -4,
+        WebkitOverflowScrolling: 'touch',
+      },
+    },
       data.months.map(function (m) {
         return h('button', {
           key: m,
+          'data-month': m,
           onClick: function () { handleSelectMonth(m); },
           className: 'btn-secondary',
           style: {
