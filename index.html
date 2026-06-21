@@ -279,12 +279,150 @@ function TransactionRow(props) {
   );
 }
 
+// --- Charts (hand-built SVG, no charting library dependency) ------------
+
+var CHART_COLORS = ['#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85751', '#7A8B5C', '#9B6B9E', '#5C8A8A', '#B08968', '#6B7A8F', '#8F6B6B'];
+
+function LineChart(props) {
+  var series = props.series; // [{ name, color, values: [{x: label, y: number}] }]
+  var height = props.height || 160;
+  var width = 440;
+  var padding = { top: 16, right: 8, bottom: 24, left: 44 };
+
+  var allValues = [];
+  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  var maxVal = Math.max.apply(null, allValues.concat([0]));
+  var minVal = Math.min.apply(null, allValues.concat([0]));
+  if (maxVal === minVal) maxVal = minVal + 1;
+
+  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
+  var innerW = width - padding.left - padding.right;
+  var innerH = height - padding.top - padding.bottom;
+
+  function xPos(i) {
+    return padding.left + (labels.length <= 1 ? innerW / 2 : (innerW * i) / (labels.length - 1));
+  }
+  function yPos(val) {
+    return padding.top + innerH - ((val - minVal) / (maxVal - minVal)) * innerH;
+  }
+
+  var gridLines = [0, 0.5, 1].map(function (frac) {
+    var val = minVal + (maxVal - minVal) * frac;
+    return { y: yPos(val), label: formatEUR(val) };
+  });
+
+  return h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block' } },
+    gridLines.map(function (gl, i) {
+      return h('g', { key: i },
+        h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: '#E3DCC9', strokeWidth: 1 }),
+        h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: '#9B9586', fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+      );
+    }),
+    series.map(function (s, si) {
+      var points = s.values.map(function (v, i) { return xPos(i) + ',' + yPos(v.y); }).join(' ');
+      var color = s.color || CHART_COLORS[si % CHART_COLORS.length];
+      return h('g', { key: s.name || si },
+        h('polyline', { points: points, fill: 'none', stroke: color, strokeWidth: 2 }),
+        s.values.map(function (v, i) {
+          return h('circle', { key: i, cx: xPos(i), cy: yPos(v.y), r: 2.5, fill: color });
+        })
+      );
+    }),
+    labels.map(function (label, i) {
+      if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
+      return h('text', {
+        key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: '#9B9586',
+        textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
+      }, label);
+    })
+  );
+}
+
+function ChartLegend(props) {
+  var items = props.items; // [{ name, color }]
+  return h('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8, marginBottom: 8 } },
+    items.map(function (item) {
+      return h('div', { key: item.name, style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6558' } },
+        h('span', { style: { width: 8, height: 8, borderRadius: 4, background: item.color, display: 'inline-block' } }),
+        item.name
+      );
+    })
+  );
+}
+
+function DonutChart(props) {
+  var data = props.data; // [{ category, amount }]
+  var size = 180;
+  var radius = 70;
+  var innerRadius = 42;
+  var cx = size / 2, cy = size / 2;
+
+  var total = data.reduce(function (sum, d) { return sum + d.amount; }, 0);
+  var angle = -Math.PI / 2; // start at top
+
+  function arcPath(startAngle, endAngle, r, ir) {
+    var x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
+    var x2 = cx + r * Math.cos(endAngle), y2 = cy + r * Math.sin(endAngle);
+    var x3 = cx + ir * Math.cos(endAngle), y3 = cy + ir * Math.sin(endAngle);
+    var x4 = cx + ir * Math.cos(startAngle), y4 = cy + ir * Math.sin(startAngle);
+    var largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0;
+    return [
+      'M', x1, y1,
+      'A', r, r, 0, largeArc, 1, x2, y2,
+      'L', x3, y3,
+      'A', ir, ir, 0, largeArc, 0, x4, y4,
+      'Z',
+    ].join(' ');
+  }
+
+  var slices = data.map(function (d, i) {
+    var fraction = total > 0 ? d.amount / total : 0;
+    var startAngle = angle;
+    var endAngle = angle + fraction * Math.PI * 2;
+    angle = endAngle;
+    return {
+      path: arcPath(startAngle, endAngle, radius, innerRadius),
+      color: CHART_COLORS[i % CHART_COLORS.length],
+      category: d.category,
+      amount: d.amount,
+    };
+  });
+
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' } },
+    h('svg', { viewBox: '0 0 ' + size + ' ' + size, style: { width: size, height: size, flexShrink: 0 } },
+      slices.map(function (s, i) { return h('path', { key: i, d: s.path, fill: s.color }); }),
+      h('text', {
+        x: cx, y: cy - 4, textAnchor: 'middle', fontSize: 11, fill: '#6B6558',
+        fontFamily: 'IBM Plex Mono, monospace',
+      }, 'total'),
+      h('text', {
+        x: cx, y: cy + 12, textAnchor: 'middle', fontSize: 13, fill: '#2B2A28', fontWeight: 600,
+        fontFamily: 'Source Serif 4, Georgia, serif',
+      }, formatEUR(total))
+    ),
+    h('div', { style: { flex: 1, minWidth: 140 } },
+      slices.map(function (s, i) {
+        return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 } },
+          h('span', { style: { width: 8, height: 8, borderRadius: 4, background: s.color, display: 'inline-block', flexShrink: 0 } }),
+          h('span', { style: { flex: 1, color: '#2B2A28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.category),
+          h('span', { style: { fontFamily: 'IBM Plex Mono, monospace', color: '#6B6558' } }, formatEUR(s.amount))
+        );
+      })
+    )
+  );
+}
+
+
 function Dashboard(props) {
   var transactions = props.transactions, overrides = props.overrides, onCategoryChange = props.onCategoryChange;
   var onAddFile = props.onAddFile, status = props.status, onBackup = props.onBackup, onRestore = props.onRestore;
 
   var selectedMonthState = useState(null);
   var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
+  var activeTabState = useState('overview');
+  var activeTab = activeTabState[0], setActiveTab = activeTabState[1];
+  var trendCategoryState = useState(null);
+  var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var restoreInputRef = useRef(null);
 
   var categorized = useMemo(function () {
@@ -325,6 +463,161 @@ function Dashboard(props) {
   var totalIncome = monthTx.filter(function (tx) { return tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
   var maxCategory = spendingByCategory[0] ? spendingByCategory[0].amount : 1;
 
+  // --- Trend computations across all months ------------------------
+
+  var monthsAscending = useMemo(function () { return months.slice().reverse(); }, [months]);
+
+  var monthlyTotals = useMemo(function () {
+    var byMonth = {};
+    categorized.forEach(function (tx) {
+      var mk = monthKey(tx.dateMov);
+      if (!byMonth[mk]) byMonth[mk] = { spent: 0, income: 0, lastBalance: null, lastDate: null };
+      if (tx.amount < 0) byMonth[mk].spent += Math.abs(tx.amount);
+      else byMonth[mk].income += tx.amount;
+      if (byMonth[mk].lastDate === null || tx.dateMov >= byMonth[mk].lastDate) {
+        byMonth[mk].lastDate = tx.dateMov;
+        byMonth[mk].lastBalance = tx.balanceAfter;
+      }
+    });
+    return byMonth;
+  }, [categorized]);
+
+  function shortMonthLabel(key) {
+    var parts = key.split('-').map(Number);
+    return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
+  }
+
+  var spendingTrend = useMemo(function () {
+    return [{
+      name: 'Spent', color: '#8A4A3C',
+      values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].spent : 0 }; }),
+    }];
+  }, [monthsAscending, monthlyTotals]);
+
+  var incomeVsExpenses = useMemo(function () {
+    return [
+      { name: 'Income', color: '#3D5A4A', values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].income : 0 }; }) },
+      { name: 'Spent', color: '#8A4A3C', values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].spent : 0 }; }) },
+    ];
+  }, [monthsAscending, monthlyTotals]);
+
+  var balanceTrend = useMemo(function () {
+    return [{
+      name: 'Balance', color: '#5B7C99',
+      values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: (monthlyTotals[mk] && monthlyTotals[mk].lastBalance !== null) ? monthlyTotals[mk].lastBalance : 0 }; }),
+    }];
+  }, [monthsAscending, monthlyTotals]);
+
+  var allCategoriesSeen = useMemo(function () {
+    var set = {};
+    categorized.forEach(function (tx) { if (tx.amount < 0) set[tx.category] = true; });
+    return Object.keys(set).sort();
+  }, [categorized]);
+
+  var activeTrendCategory = trendCategory || allCategoriesSeen[0];
+
+  var categoryTrend = useMemo(function () {
+    if (!activeTrendCategory) return [];
+    return [{
+      name: activeTrendCategory, color: '#8A4A3C',
+      values: monthsAscending.map(function (mk) {
+        var sum = 0;
+        categorized.forEach(function (tx) {
+          if (monthKey(tx.dateMov) === mk && tx.category === activeTrendCategory && tx.amount < 0) sum += Math.abs(tx.amount);
+        });
+        return { x: shortMonthLabel(mk), y: sum };
+      }),
+    }];
+  }, [monthsAscending, categorized, activeTrendCategory]);
+
+  function TabButton(tabId, label) {
+    return h('button', {
+      key: tabId,
+      onClick: function () { setActiveTab(tabId); },
+      style: {
+        flex: 1, padding: '8px 12px', fontSize: 12, borderRadius: 4,
+        border: '1px solid #E3DCC9',
+        background: activeTab === tabId ? '#2B2A28' : 'white',
+        color: activeTab === tabId ? '#FAF7F0' : '#2B2A28',
+        cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
+      },
+    }, label);
+  }
+
+  var overviewPanel = h('div', null,
+    h('div', { style: { display: 'flex', gap: 6, marginBottom: 24, overflowX: 'auto', paddingBottom: 4 } },
+      months.map(function (m) {
+        return h('button', {
+          key: m,
+          onClick: function () { setSelectedMonth(m); },
+          style: {
+            flexShrink: 0, padding: '6px 12px', fontSize: 12, borderRadius: 4,
+            border: '1px solid #E3DCC9',
+            background: m === activeMonth ? '#2B2A28' : 'white',
+            color: m === activeMonth ? '#FAF7F0' : '#2B2A28',
+            cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
+          },
+        }, monthLabel(m));
+      })
+    ),
+    h('div', { style: { display: 'flex', gap: 24, marginBottom: 32, paddingBottom: 20, borderBottom: '1px solid #E3DCC9' } },
+      h('div', null,
+        h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#8A4A3C' } }, formatEUR(totalSpent)),
+        h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'spent')
+      ),
+      h('div', null,
+        h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#3D5A4A' } }, formatEUR(totalIncome)),
+        h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'in')
+      )
+    ),
+    spendingByCategory.length > 0 ? h('div', { style: { marginBottom: 32 } },
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } }, 'Spending by category'),
+      h(DonutChart, { data: spendingByCategory })
+    ) : null,
+    h('div', null,
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } },
+        'Transactions (' + monthTx.length + ') \u2014 tap one to recategorize'),
+      monthTx.length === 0
+        ? h('p', { style: { color: '#6B6558', fontSize: 13 } }, 'No transactions this month.')
+        : monthTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: onCategoryChange }); })
+    )
+  );
+
+  var trendsPanel = h('div', null,
+    h('div', { style: { marginBottom: 32 } },
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Spending trend'),
+      h(LineChart, { series: spendingTrend })
+    ),
+    h('div', { style: { marginBottom: 32 } },
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Income vs. spending'),
+      h(ChartLegend, { items: [{ name: 'Income', color: '#3D5A4A' }, { name: 'Spent', color: '#8A4A3C' }] }),
+      h(LineChart, { series: incomeVsExpenses })
+    ),
+    h('div', { style: { marginBottom: 32 } },
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Balance over time'),
+      h(LineChart, { series: balanceTrend })
+    ),
+    h('div', { style: { marginBottom: 32 } },
+      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } }, 'Category trend'),
+      h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 } },
+        allCategoriesSeen.map(function (c) {
+          return h('button', {
+            key: c,
+            onClick: function () { setTrendCategory(c); },
+            style: {
+              flexShrink: 0, padding: '5px 10px', fontSize: 11, borderRadius: 4,
+              border: '1px solid #E3DCC9',
+              background: c === activeTrendCategory ? '#2B2A28' : 'white',
+              color: c === activeTrendCategory ? '#FAF7F0' : '#2B2A28',
+              cursor: 'pointer',
+            },
+          }, c);
+        })
+      ),
+      h(LineChart, { series: categoryTrend })
+    )
+  );
+
   return h('div', { style: { minHeight: '100vh', background: '#FAF7F0', fontFamily: "'Inter', -apple-system, sans-serif", color: '#2B2A28' } },
     h('div', { style: { maxWidth: 480, margin: '0 auto', padding: '32px 20px 80px' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid #2B2A28', paddingBottom: 14, marginBottom: 16 } },
@@ -335,7 +628,7 @@ function Dashboard(props) {
         h(UploadBox, { onFile: onAddFile, compact: true }),
         status ? h('p', { style: { fontSize: 12, color: '#6B6558', marginTop: 8 } }, status) : null
       ),
-      h('div', { style: { display: 'flex', gap: 8, marginBottom: 24 } },
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 20 } },
         h('button', {
           onClick: onBackup,
           style: { flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 4, border: '1px solid #E3DCC9', background: 'white', color: '#2B2A28', cursor: 'pointer' },
@@ -349,44 +642,11 @@ function Dashboard(props) {
           onChange: function (e) { onRestore(e.target.files[0]); e.target.value = ''; },
         })
       ),
-      h('div', { style: { display: 'flex', gap: 6, marginBottom: 24, overflowX: 'auto', paddingBottom: 4 } },
-        months.map(function (m) {
-          return h('button', {
-            key: m,
-            onClick: function () { setSelectedMonth(m); },
-            style: {
-              flexShrink: 0, padding: '6px 12px', fontSize: 12, borderRadius: 4,
-              border: '1px solid #E3DCC9',
-              background: m === activeMonth ? '#2B2A28' : 'white',
-              color: m === activeMonth ? '#FAF7F0' : '#2B2A28',
-              cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
-            },
-          }, monthLabel(m));
-        })
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 28 } },
+        TabButton('overview', 'Overview'),
+        TabButton('trends', 'Trends')
       ),
-      h('div', { style: { display: 'flex', gap: 24, marginBottom: 32, paddingBottom: 20, borderBottom: '1px solid #E3DCC9' } },
-        h('div', null,
-          h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#8A4A3C' } }, formatEUR(totalSpent)),
-          h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'spent')
-        ),
-        h('div', null,
-          h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#3D5A4A' } }, formatEUR(totalIncome)),
-          h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'in')
-        )
-      ),
-      spendingByCategory.length > 0 ? h('div', { style: { marginBottom: 32 } },
-        h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } }, 'Spending by category'),
-        spendingByCategory.map(function (c) {
-          return h(CategoryBar, { key: c.category, category: c.category, amount: c.amount, max: maxCategory });
-        })
-      ) : null,
-      h('div', null,
-        h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } },
-          'Transactions (' + monthTx.length + ') \u2014 tap one to recategorize'),
-        monthTx.length === 0
-          ? h('p', { style: { color: '#6B6558', fontSize: 13 } }, 'No transactions this month.')
-          : monthTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: onCategoryChange }); })
-      )
+      activeTab === 'overview' ? overviewPanel : trendsPanel
     )
   );
 }
