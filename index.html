@@ -2,14 +2,125 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Ledger" />
+<meta name="theme-color" content="#FAF7F0" />
 <title>Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; background: #FAF7F0; font-family: 'Inter', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
-  #root { min-height: 100vh; }
+:root {
+  --bg: #FAF7F0;
+  --surface: #ffffff;
+  --surface2: #F1E9DF;
+  --border: #E3DCC9;
+  --accent: #8A4A3C;
+  --accent2: #6B5B95;
+  --gain: #3D5A4A;
+  --loss: #8A4A3C;
+  --dividend: #C9A66B;
+  --text: #2B2A28;
+  --muted: #6B6558;
+  --mono: 'IBM Plex Mono', monospace;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --nav-h: 58px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+[data-theme="dark"] {
+  --bg: #0f1117;
+  --surface: #181c27;
+  --surface2: #1f2436;
+  --border: #2a3050;
+  --accent: #e08868;
+  --accent2: #9d8cf0;
+  --gain: #2dd4a0;
+  --loss: #f25f5c;
+  --dividend: #f7c948;
+  --text: #e8ecf4;
+  --muted: #7a85a0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100vh; height: 100dvh; background: var(--bg); color: var(--text); font-family: var(--sans); overscroll-behavior: none; overflow-x: hidden; transition: background 0.2s, color 0.2s; }
+button { font-family: var(--sans); }
+
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+.topbar {
+  padding: calc(var(--safe-top) + 14px) 18px 14px;
+  background: rgba(var(--bg-rgb,250,247,240),0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 10;
+}
+.logo {
+  width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; color: #fff; font-family: var(--serif);
+}
+.topbar-text { flex: 1; min-width: 0; }
+.topbar-text h1 { font-family: var(--serif); font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-text p { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; cursor: pointer; flex-shrink: 0;
+}
+
+#main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 16px); }
+.screen { padding: 16px; max-width: 480px; margin: 0 auto; }
+
+.bottomnav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(var(--nav-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: rgba(var(--surface-rgb,255,255,255),0.96);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex; z-index: 10;
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; border: none; background: none; color: var(--muted); font-size: 9px; font-weight: 500; cursor: pointer;
+}
+.nav-item .icon { font-size: 18px; line-height: 1; }
+.nav-item.active { color: var(--accent); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: none;
+  border-radius: 10px; padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-secondary {
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.section-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+
+.sheet-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-end; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+.sheet { position: relative; width: 100%; background: var(--surface); border-radius: 18px 18px 0 0; max-height: 82vh; display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); }
+.sheet-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.sheet-body { overflow-y: auto; padding: 12px 16px; flex: 1; }
+
+.faq-q { width: 100%; text-align: left; background: none; border: none; padding: 14px 2px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; font-family: var(--sans); border-bottom: 1px solid var(--border); }
+.faq-a { padding: 0 2px 14px; font-size: 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
+
+.update-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  background: var(--accent); color: #fff;
+  padding: calc(var(--safe-top) + 10px) 16px 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 13px; font-weight: 600;
+}
+.update-banner button { background: #fff; color: var(--accent); border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+.screen-footer { text-align: center; margin-top: 28px; padding: 12px 0 4px; opacity: 0.6; }
+.screen-footer div { font-size: 10px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -33,6 +144,7 @@ window.addEventListener('error', function (e) {
 });
 </script>
 
+
 <script>
 // No JSX, no Babel — plain React.createElement calls so this never depends
 // on in-browser transpilation working correctly on every device.
@@ -41,6 +153,66 @@ var useState = React.useState;
 var useMemo = React.useMemo;
 var useCallback = React.useCallback;
 var useRef = React.useRef;
+var useEffect = React.useEffect;
+
+// --- Versioning ------------------------------------------------------
+// Bump this whenever a meaningful change ships, and add an entry to
+// CHANGELOG below. The update-check banner compares this string against
+// whatever is live at the same URL — it never touches localStorage, so a
+// reload triggered from the banner can't lose saved transactions.
+var APP_VERSION = '1.0.0';
+
+var CHANGELOG = [
+  { version: '1.0.0', notes: [
+    'Primeira versão com navegação por separadores inferiores: Resumo, Tendências, Transações e Definições',
+    'Tema escuro adicionado, com alternância e preferência guardada',
+    'Secção de Perguntas Frequentes',
+    'Aviso automático de nova versão disponível',
+  ]},
+];
+
+var FAQ_ITEMS = [
+  { q: 'Como funciona a categorização automática?',
+    a: 'A app procura por palavras-chave conhecidas na descrição de cada transação (ex: "VIA VERDE", "UBER", "FARMACIA") e atribui uma categoria com base na primeira correspondência. Transações que não correspondem a nenhuma regra ficam como "Other" ou "Card Purchase (uncategorized)". Podes corrigir manualmente qualquer transação tocando nela.' },
+  { q: 'As correções manuais de categoria mantêm-se?',
+    a: 'Sim. Qualquer categoria que escolhas manualmente é guardada separadamente e tem sempre prioridade sobre a categorização automática, mesmo que reimportes o mesmo ficheiro mais tarde.' },
+  { q: 'Posso importar o mesmo ficheiro várias vezes?',
+    a: 'Sim, sem problema. Cada transação tem um identificador baseado na data, valor e descrição, por isso transações já guardadas são automaticamente ignoradas em importações repetidas — não vais ter duplicados.' },
+  { q: 'Onde ficam guardados os meus dados?',
+    a: 'Tudo fica guardado localmente neste navegador, neste dispositivo (localStorage). Nada é enviado para nenhum servidor. Isto significa que limpar os dados do navegador, ou usar outro dispositivo, não mantém os teus dados — usa o botão de backup nas Definições regularmente.' },
+  { q: 'Que ficheiro devo importar?',
+    a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
+];
+
+// --- Theme management ------------------------------------------------------
+
+function getStoredTheme() {
+  try { return localStorage.getItem('ledger:theme') || 'light'; } catch (e) { return 'light'; }
+}
+function setStoredTheme(theme) {
+  try { localStorage.setItem('ledger:theme', theme); } catch (e) {}
+}
+function applyTheme(theme) {
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1117' : '#FAF7F0');
+}
+
+// --- Update check ------------------------------------------------------
+// Fetches this same page in the background and compares APP_VERSION.
+// Deliberately does nothing to localStorage — a reload from this banner
+// only re-runs the page, it never clears saved transactions or overrides,
+// since those live in localStorage which persists across reloads.
+function checkForUpdate(onUpdateAvailable) {
+  fetch(location.href, { cache: 'no-store' })
+    .then(function (r) { return r.text(); })
+    .then(function (html) {
+      var m = html.match(/var APP_VERSION = '([\d.]+)'/);
+      if (m && m[1] !== APP_VERSION) onUpdateAvailable(m[1]);
+    })
+    .catch(function () {});
+}
 
 // --- Parsing -----------------------------------------------------------
 
@@ -210,16 +382,16 @@ function UploadBox(props) {
     onDrop: function (e) { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); },
     style: {
       display: 'block', width: '100%',
-      border: '2px dashed ' + (dragging ? '#8A4A3C' : '#E3DCC9'),
+      border: '2px dashed ' + (dragging ? 'var(--accent)' : 'var(--border)'),
       borderRadius: 8, padding: compact ? '16px' : '48px 24px',
       textAlign: 'center', cursor: 'pointer',
-      background: dragging ? '#F1E9DF' : 'white',
+      background: dragging ? 'var(--surface2)' : 'var(--surface)',
       transition: 'all 0.15s ease', boxSizing: 'border-box',
     },
   },
-    h('div', { style: { fontSize: compact ? 13 : 14, color: '#2B2A28', fontWeight: 500, marginBottom: 4 } },
+    h('div', { style: { fontSize: compact ? 13 : 14, color: 'var(--text)', fontWeight: 500, marginBottom: 4 } },
       compact ? 'Add another export' : 'Tap to choose your CSV file'),
-    !compact ? h('div', { style: { fontSize: 12, color: '#6B6558' } }, 'or drag and drop') : null,
+    !compact ? h('div', { style: { fontSize: 12, color: 'var(--muted)' } }, 'or drag and drop') : null,
     h('input', {
       type: 'file', accept: '.csv,text/csv',
       onChange: function (e) { handleFiles(e.target.files); e.target.value = ''; },
@@ -231,12 +403,12 @@ function UploadBox(props) {
 function CategoryBar(props) {
   var category = props.category, amount = props.amount, max = props.max;
   var pct = max > 0 ? (amount / max) * 100 : 0;
-  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #E3DCC9', fontSize: 14 } },
-    h('span', { style: { flex: 1, color: '#2B2A28' } }, category),
-    h('span', { style: { flex: 2, height: 6, background: '#E3DCC9', borderRadius: 3, overflow: 'hidden' } },
-      h('span', { style: { display: 'block', height: '100%', width: pct + '%', background: '#8A4A3C' } })
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 } },
+    h('span', { style: { flex: 1, color: 'var(--text)' } }, category),
+    h('span', { style: { flex: 2, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' } },
+      h('span', { style: { display: 'block', height: '100%', width: pct + '%', background: 'var(--accent)' } })
     ),
-    h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", width: 90, textAlign: 'right', color: '#2B2A28' } }, formatEUR(amount))
+    h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", width: 90, textAlign: 'right', color: 'var(--text)' } }, formatEUR(amount))
   );
 }
 
@@ -246,19 +418,19 @@ function TransactionRow(props) {
   var editing = editingState[0], setEditing = editingState[1];
   var isPositive = tx.amount > 0;
 
-  return h('div', { style: { borderBottom: '1px solid #E3DCC9', padding: '10px 0' } },
+  return h('div', { style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
     h('div', { style: { display: 'grid', gridTemplateColumns: '60px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 } },
-      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#6B6558' } }, formatDate(tx.dateMov)),
+      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
       h('span', {
         onClick: function () { setEditing(!editing); },
-        style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#2B2A28', cursor: 'pointer' },
+        style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', cursor: 'pointer' },
         title: tx.description,
       },
         tx.description,
-        h('span', { style: { display: 'block', fontSize: 10, color: tx.isOverride ? '#8A4A3C' : '#9B9586', textTransform: 'uppercase', letterSpacing: '0.04em' } },
+        h('span', { style: { display: 'block', fontSize: 10, color: tx.isOverride ? 'var(--accent)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' } },
           tx.category + (tx.isOverride ? ' \u00b7  edited' : ''))
       ),
-      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", textAlign: 'right', color: isPositive ? '#3D5A4A' : '#8A4A3C' } },
+      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", textAlign: 'right', color: isPositive ? 'var(--gain)' : 'var(--loss)' } },
         (isPositive ? '+' : '') + formatEUR(tx.amount))
     ),
     editing ? h('div', { style: { marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 } },
@@ -268,9 +440,9 @@ function TransactionRow(props) {
           onClick: function () { onCategoryChange(tx.id, c); setEditing(false); },
           style: {
             fontSize: 11, padding: '4px 8px', borderRadius: 4,
-            border: '1px solid #E3DCC9',
-            background: c === tx.category ? '#2B2A28' : 'white',
-            color: c === tx.category ? '#FAF7F0' : '#2B2A28',
+            border: '1px solid var(--border)',
+            background: c === tx.category ? 'var(--text)' : 'var(--surface)',
+            color: c === tx.category ? 'var(--bg)' : 'var(--text)',
             cursor: 'pointer',
           },
         }, c);
@@ -280,6 +452,13 @@ function TransactionRow(props) {
 }
 
 // --- Charts (hand-built SVG, no charting library dependency) ------------
+
+// SVG fill/stroke attributes don't reliably resolve var(--x) the same way
+// regular element styles do, so for chart text/gridlines we read the actual
+// computed value of each CSS variable at render time instead.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
+}
 
 var CHART_COLORS = ['#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85751', '#7A8B5C', '#9B6B9E', '#5C8A8A', '#B08968', '#6B7A8F', '#8F6B6B'];
 
@@ -314,8 +493,8 @@ function LineChart(props) {
   return h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block' } },
     gridLines.map(function (gl, i) {
       return h('g', { key: i },
-        h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: '#E3DCC9', strokeWidth: 1 }),
-        h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: '#9B9586', fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+        h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1 }),
+        h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
       );
     }),
     series.map(function (s, si) {
@@ -331,7 +510,7 @@ function LineChart(props) {
     labels.map(function (label, i) {
       if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
       return h('text', {
-        key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: '#9B9586',
+        key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: cssVar('--muted'),
         textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
       }, label);
     })
@@ -342,7 +521,7 @@ function ChartLegend(props) {
   var items = props.items; // [{ name, color }]
   return h('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8, marginBottom: 8 } },
     items.map(function (item) {
-      return h('div', { key: item.name, style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6B6558' } },
+      return h('div', { key: item.name, style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted)' } },
         h('span', { style: { width: 8, height: 8, borderRadius: 4, background: item.color, display: 'inline-block' } }),
         item.name
       );
@@ -392,11 +571,11 @@ function DonutChart(props) {
     h('svg', { viewBox: '0 0 ' + size + ' ' + size, style: { width: size, height: size, flexShrink: 0 } },
       slices.map(function (s, i) { return h('path', { key: i, d: s.path, fill: s.color }); }),
       h('text', {
-        x: cx, y: cy - 4, textAnchor: 'middle', fontSize: 11, fill: '#6B6558',
+        x: cx, y: cy - 4, textAnchor: 'middle', fontSize: 11, fill: cssVar('--muted'),
         fontFamily: 'IBM Plex Mono, monospace',
       }, 'total'),
       h('text', {
-        x: cx, y: cy + 12, textAnchor: 'middle', fontSize: 13, fill: '#2B2A28', fontWeight: 600,
+        x: cx, y: cy + 12, textAnchor: 'middle', fontSize: 13, fill: cssVar('--text'), fontWeight: 600,
         fontFamily: 'Source Serif 4, Georgia, serif',
       }, formatEUR(total))
     ),
@@ -404,8 +583,8 @@ function DonutChart(props) {
       slices.map(function (s, i) {
         return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 } },
           h('span', { style: { width: 8, height: 8, borderRadius: 4, background: s.color, display: 'inline-block', flexShrink: 0 } }),
-          h('span', { style: { flex: 1, color: '#2B2A28', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.category),
-          h('span', { style: { fontFamily: 'IBM Plex Mono, monospace', color: '#6B6558' } }, formatEUR(s.amount))
+          h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.category),
+          h('span', { style: { fontFamily: 'IBM Plex Mono, monospace', color: 'var(--muted)' } }, formatEUR(s.amount))
         );
       })
     )
@@ -413,18 +592,85 @@ function DonutChart(props) {
 }
 
 
-function Dashboard(props) {
-  var transactions = props.transactions, overrides = props.overrides, onCategoryChange = props.onCategoryChange;
-  var onAddFile = props.onAddFile, status = props.status, onBackup = props.onBackup, onRestore = props.onRestore;
+function EmptyState(props) {
+  var onFile = props.onFile, error = props.error;
+  return h('div', { className: 'screen', style: { minHeight: '70vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' } },
+    h('h1', { style: { fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: 'var(--text)', marginBottom: 8 } }, 'Ledger'),
+    h('p', { style: { color: 'var(--muted)', fontSize: 14, marginBottom: 28, textAlign: 'center', maxWidth: 320 } }, 'Upload your Caixadirecta export to get started.'),
+    h('div', { style: { width: '100%', maxWidth: 360 } }, h(UploadBox, { onFile: onFile })),
+    error ? h('p', { style: { color: 'var(--loss)', fontSize: 13, marginTop: 20, maxWidth: 320, textAlign: 'center' } }, error) : null,
+    h('p', { style: { color: 'var(--muted)', fontSize: 11, marginTop: 28, maxWidth: 320, textAlign: 'center', opacity: 0.8 } },
+      'Your data is saved in this browser on this device.')
+  );
+}
 
-  var selectedMonthState = useState(null);
-  var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
-  var activeTabState = useState('overview');
-  var activeTab = activeTabState[0], setActiveTab = activeTabState[1];
-  var trendCategoryState = useState(null);
-  var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
-  var restoreInputRef = useRef(null);
+// --- Modals & overlays ------------------------------------------------------
 
+function Sheet(props) {
+  return h('div', { className: 'sheet-overlay' },
+    h('div', { className: 'sheet-backdrop', onClick: props.onClose }),
+    h('div', { className: 'sheet' },
+      h('div', { className: 'sheet-header' },
+        h('span', { style: { fontSize: 15, fontWeight: 700 } }, props.title),
+        h('button', { className: 'icon-btn', onClick: props.onClose }, '\u2715')
+      ),
+      h('div', { className: 'sheet-body' }, props.children)
+    )
+  );
+}
+
+function FAQItem(props) {
+  var openState = useState(false);
+  var open = openState[0], setOpen = openState[1];
+  return h('div', null,
+    h('button', { className: 'faq-q', onClick: function () { setOpen(!open); } },
+      h('span', { style: { fontSize: 13.5, fontWeight: 600, color: 'var(--text)' } }, props.q),
+      h('span', { style: { color: 'var(--muted)', fontSize: 12, flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none' } }, '\u25be')
+    ),
+    open ? h('div', { className: 'faq-a' }, props.a) : null
+  );
+}
+
+function FAQModal(props) {
+  return h(Sheet, { title: 'Perguntas frequentes', onClose: props.onClose },
+    FAQ_ITEMS.map(function (item, i) { return h(FAQItem, { key: i, q: item.q, a: item.a }); })
+  );
+}
+
+function VersionModal(props) {
+  return h(Sheet, { title: 'Ledger', onClose: props.onClose },
+    h('div', { style: { fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 16 } },
+      'Vers\u00e3o ' + APP_VERSION + ' \u00b7 \u00a9 ' + new Date().getFullYear() + ' Ledger'),
+    CHANGELOG.map(function (entry, i) {
+      return h('div', { key: i, style: { marginBottom: 18 } },
+        h('div', { style: { fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 8 } }, 'Vers\u00e3o ' + entry.version),
+        h('ul', { style: { margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 } },
+          entry.notes.map(function (n, ni) {
+            return h('li', { key: ni, style: { fontSize: 13, color: 'var(--text)', lineHeight: 1.4 } }, n);
+          })
+        )
+      );
+    })
+  );
+}
+
+function UpdateBanner(props) {
+  return h('div', { className: 'update-banner' },
+    h('span', null, 'Nova vers\u00e3o dispon\u00edvel (v' + props.newVersion + ')'),
+    h('button', { onClick: function () { location.reload(); } }, 'Atualizar')
+  );
+}
+
+function ScreenFooter() {
+  return h('div', { className: 'screen-footer' },
+    h('div', null, '\u00a9 ' + new Date().getFullYear() + ' Ledger'),
+    h('div', null, 'v' + APP_VERSION)
+  );
+}
+
+// --- Shared data hook --------------------------------------------------
+
+function useLedgerData(transactions, overrides) {
   var categorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
@@ -440,30 +686,6 @@ function Dashboard(props) {
     categorized.forEach(function (tx) { set[monthKey(tx.dateMov)] = true; });
     return Object.keys(set).sort().reverse();
   }, [categorized]);
-
-  var activeMonth = selectedMonth || months[0];
-
-  var monthTx = useMemo(function () {
-    return categorized
-      .filter(function (tx) { return monthKey(tx.dateMov) === activeMonth; })
-      .sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
-  }, [categorized, activeMonth]);
-
-  var spendingByCategory = useMemo(function () {
-    var totals = {};
-    monthTx.forEach(function (tx) {
-      if (tx.amount < 0) totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amount);
-    });
-    return Object.keys(totals)
-      .map(function (category) { return { category: category, amount: totals[category] }; })
-      .sort(function (a, b) { return b.amount - a.amount; });
-  }, [monthTx]);
-
-  var totalSpent = spendingByCategory.reduce(function (sum, c) { return sum + c.amount; }, 0);
-  var totalIncome = monthTx.filter(function (tx) { return tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var maxCategory = spendingByCategory[0] ? spendingByCategory[0].amount : 1;
-
-  // --- Trend computations across all months ------------------------
 
   var monthsAscending = useMemo(function () { return months.slice().reverse(); }, [months]);
 
@@ -482,186 +704,304 @@ function Dashboard(props) {
     return byMonth;
   }, [categorized]);
 
-  function shortMonthLabel(key) {
-    var parts = key.split('-').map(Number);
-    return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
-  }
-
-  var spendingTrend = useMemo(function () {
-    return [{
-      name: 'Spent', color: '#8A4A3C',
-      values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].spent : 0 }; }),
-    }];
-  }, [monthsAscending, monthlyTotals]);
-
-  var incomeVsExpenses = useMemo(function () {
-    return [
-      { name: 'Income', color: '#3D5A4A', values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].income : 0 }; }) },
-      { name: 'Spent', color: '#8A4A3C', values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: monthlyTotals[mk] ? monthlyTotals[mk].spent : 0 }; }) },
-    ];
-  }, [monthsAscending, monthlyTotals]);
-
-  var balanceTrend = useMemo(function () {
-    return [{
-      name: 'Balance', color: '#5B7C99',
-      values: monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: (monthlyTotals[mk] && monthlyTotals[mk].lastBalance !== null) ? monthlyTotals[mk].lastBalance : 0 }; }),
-    }];
-  }, [monthsAscending, monthlyTotals]);
-
   var allCategoriesSeen = useMemo(function () {
     var set = {};
     categorized.forEach(function (tx) { if (tx.amount < 0) set[tx.category] = true; });
     return Object.keys(set).sort();
   }, [categorized]);
 
-  var activeTrendCategory = trendCategory || allCategoriesSeen[0];
+  return {
+    categorized: categorized,
+    months: months,
+    monthsAscending: monthsAscending,
+    monthlyTotals: monthlyTotals,
+    allCategoriesSeen: allCategoriesSeen,
+  };
+}
+
+function shortMonthLabel(key) {
+  var parts = key.split('-').map(Number);
+  return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
+}
+
+// --- Overview screen ------------------------------------------------------
+
+function OverviewScreen(props) {
+  var data = useLedgerData(props.transactions, props.overrides);
+  var selectedMonthState = useState(null);
+  var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
+
+  var activeMonth = selectedMonth || data.months[0];
+
+  var monthTx = useMemo(function () {
+    return data.categorized
+      .filter(function (tx) { return monthKey(tx.dateMov) === activeMonth; })
+      .sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
+  }, [data.categorized, activeMonth]);
+
+  var spendingByCategory = useMemo(function () {
+    var totals = {};
+    monthTx.forEach(function (tx) {
+      if (tx.amount < 0) totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amount);
+    });
+    return Object.keys(totals)
+      .map(function (category) { return { category: category, amount: totals[category] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }, [monthTx]);
+
+  var totalSpent = spendingByCategory.reduce(function (sum, c) { return sum + c.amount; }, 0);
+  var totalIncome = monthTx.filter(function (tx) { return tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+
+  if (props.transactions.length === 0) {
+    return h(EmptyState, { onFile: props.onAddFile, error: props.error });
+  }
+
+  return h('div', { className: 'screen' },
+    h('div', { style: { display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 } },
+      data.months.map(function (m) {
+        return h('button', {
+          key: m,
+          onClick: function () { setSelectedMonth(m); },
+          className: 'btn-secondary',
+          style: {
+            flexShrink: 0, fontFamily: 'var(--mono)',
+            background: m === activeMonth ? 'var(--text)' : 'var(--surface)',
+            color: m === activeMonth ? 'var(--bg)' : 'var(--text)',
+            borderColor: m === activeMonth ? 'var(--text)' : 'var(--border)',
+          },
+        }, monthLabel(m));
+      })
+    ),
+    h('div', { style: { display: 'flex', gap: 24, marginBottom: 28, paddingBottom: 18, borderBottom: '1px solid var(--border)' } },
+      h('div', null,
+        h('div', { style: { fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: 'var(--loss)' } }, formatEUR(totalSpent)),
+        h('div', { style: { fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' } }, 'spent')
+      ),
+      h('div', null,
+        h('div', { style: { fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: 'var(--gain)' } }, formatEUR(totalIncome)),
+        h('div', { style: { fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' } }, 'in')
+      )
+    ),
+    spendingByCategory.length > 0 ? h('div', { style: { marginBottom: 28 } },
+      h('p', { className: 'section-title' }, 'Spending by category'),
+      h(DonutChart, { data: spendingByCategory })
+    ) : null,
+    h('div', null,
+      h('p', { className: 'section-title' }, 'Transactions (' + monthTx.length + ') \u2014 tap one to recategorize'),
+      monthTx.length === 0
+        ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions this month.')
+        : monthTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange }); })
+    ),
+    h(ScreenFooter)
+  );
+}
+
+// --- Trends screen ------------------------------------------------------
+
+function TrendsScreen(props) {
+  var data = useLedgerData(props.transactions, props.overrides);
+  var trendCategoryState = useState(null);
+  var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
+
+  var spendingTrend = useMemo(function () {
+    return [{
+      name: 'Spent', color: 'var(--loss)',
+      values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }),
+    }];
+  }, [data.monthsAscending, data.monthlyTotals]);
+
+  var incomeVsExpenses = useMemo(function () {
+    return [
+      { name: 'Income', color: 'var(--gain)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].income : 0 }; }) },
+      { name: 'Spent', color: 'var(--loss)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }) },
+    ];
+  }, [data.monthsAscending, data.monthlyTotals]);
+
+  var balanceTrend = useMemo(function () {
+    return [{
+      name: 'Balance', color: 'var(--accent2)',
+      values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: (data.monthlyTotals[mk] && data.monthlyTotals[mk].lastBalance !== null) ? data.monthlyTotals[mk].lastBalance : 0 }; }),
+    }];
+  }, [data.monthsAscending, data.monthlyTotals]);
+
+  var activeTrendCategory = trendCategory || data.allCategoriesSeen[0];
 
   var categoryTrend = useMemo(function () {
     if (!activeTrendCategory) return [];
     return [{
-      name: activeTrendCategory, color: '#8A4A3C',
-      values: monthsAscending.map(function (mk) {
+      name: activeTrendCategory, color: 'var(--loss)',
+      values: data.monthsAscending.map(function (mk) {
         var sum = 0;
-        categorized.forEach(function (tx) {
+        data.categorized.forEach(function (tx) {
           if (monthKey(tx.dateMov) === mk && tx.category === activeTrendCategory && tx.amount < 0) sum += Math.abs(tx.amount);
         });
         return { x: shortMonthLabel(mk), y: sum };
       }),
     }];
-  }, [monthsAscending, categorized, activeTrendCategory]);
+  }, [data.monthsAscending, data.categorized, activeTrendCategory]);
 
-  function TabButton(tabId, label) {
-    return h('button', {
-      key: tabId,
-      onClick: function () { setActiveTab(tabId); },
-      style: {
-        flex: 1, padding: '8px 12px', fontSize: 12, borderRadius: 4,
-        border: '1px solid #E3DCC9',
-        background: activeTab === tabId ? '#2B2A28' : 'white',
-        color: activeTab === tabId ? '#FAF7F0' : '#2B2A28',
-        cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
-      },
-    }, label);
+  if (props.transactions.length === 0) {
+    return h(EmptyState, { onFile: props.onAddFile, error: props.error });
   }
 
-  var overviewPanel = h('div', null,
-    h('div', { style: { display: 'flex', gap: 6, marginBottom: 24, overflowX: 'auto', paddingBottom: 4 } },
-      months.map(function (m) {
-        return h('button', {
-          key: m,
-          onClick: function () { setSelectedMonth(m); },
-          style: {
-            flexShrink: 0, padding: '6px 12px', fontSize: 12, borderRadius: 4,
-            border: '1px solid #E3DCC9',
-            background: m === activeMonth ? '#2B2A28' : 'white',
-            color: m === activeMonth ? '#FAF7F0' : '#2B2A28',
-            cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
-          },
-        }, monthLabel(m));
-      })
-    ),
-    h('div', { style: { display: 'flex', gap: 24, marginBottom: 32, paddingBottom: 20, borderBottom: '1px solid #E3DCC9' } },
-      h('div', null,
-        h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#8A4A3C' } }, formatEUR(totalSpent)),
-        h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'spent')
+  if (data.months.length < 2) {
+    return h('div', { className: 'screen' },
+      h('div', { className: 'card', style: { textAlign: 'center', padding: '40px 20px' } },
+        h('p', { style: { fontSize: 14, color: 'var(--muted)' } }, 'Trends need at least two months of data. Keep uploading exports over time and this will fill in.')
       ),
-      h('div', null,
-        h('div', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#3D5A4A' } }, formatEUR(totalIncome)),
-        h('div', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' } }, 'in')
-      )
-    ),
-    spendingByCategory.length > 0 ? h('div', { style: { marginBottom: 32 } },
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } }, 'Spending by category'),
-      h(DonutChart, { data: spendingByCategory })
-    ) : null,
-    h('div', null,
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } },
-        'Transactions (' + monthTx.length + ') \u2014 tap one to recategorize'),
-      monthTx.length === 0
-        ? h('p', { style: { color: '#6B6558', fontSize: 13 } }, 'No transactions this month.')
-        : monthTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: onCategoryChange }); })
-    )
-  );
+      h(ScreenFooter)
+    );
+  }
 
-  var trendsPanel = h('div', null,
-    h('div', { style: { marginBottom: 32 } },
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Spending trend'),
+  return h('div', { className: 'screen' },
+    h('div', { style: { marginBottom: 28 } },
+      h('p', { className: 'section-title' }, 'Spending trend'),
       h(LineChart, { series: spendingTrend })
     ),
-    h('div', { style: { marginBottom: 32 } },
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Income vs. spending'),
-      h(ChartLegend, { items: [{ name: 'Income', color: '#3D5A4A' }, { name: 'Spent', color: '#8A4A3C' }] }),
+    h('div', { style: { marginBottom: 28 } },
+      h('p', { className: 'section-title' }, 'Income vs. spending'),
+      h(ChartLegend, { items: [{ name: 'Income', color: 'var(--gain)' }, { name: 'Spent', color: 'var(--loss)' }] }),
       h(LineChart, { series: incomeVsExpenses })
     ),
-    h('div', { style: { marginBottom: 32 } },
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 4 } }, 'Balance over time'),
+    h('div', { style: { marginBottom: 28 } },
+      h('p', { className: 'section-title' }, 'Balance over time'),
       h(LineChart, { series: balanceTrend })
     ),
-    h('div', { style: { marginBottom: 32 } },
-      h('p', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 } }, 'Category trend'),
+    h('div', { style: { marginBottom: 28 } },
+      h('p', { className: 'section-title' }, 'Category trend'),
       h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 } },
-        allCategoriesSeen.map(function (c) {
+        data.allCategoriesSeen.map(function (c) {
           return h('button', {
             key: c,
             onClick: function () { setTrendCategory(c); },
+            className: 'btn-secondary',
             style: {
-              flexShrink: 0, padding: '5px 10px', fontSize: 11, borderRadius: 4,
-              border: '1px solid #E3DCC9',
-              background: c === activeTrendCategory ? '#2B2A28' : 'white',
-              color: c === activeTrendCategory ? '#FAF7F0' : '#2B2A28',
-              cursor: 'pointer',
+              flexShrink: 0, fontSize: 11,
+              background: c === activeTrendCategory ? 'var(--text)' : 'var(--surface)',
+              color: c === activeTrendCategory ? 'var(--bg)' : 'var(--text)',
+              borderColor: c === activeTrendCategory ? 'var(--text)' : 'var(--border)',
             },
           }, c);
         })
       ),
       h(LineChart, { series: categoryTrend })
-    )
-  );
-
-  return h('div', { style: { minHeight: '100vh', background: '#FAF7F0', fontFamily: "'Inter', -apple-system, sans-serif", color: '#2B2A28' } },
-    h('div', { style: { maxWidth: 480, margin: '0 auto', padding: '32px 20px 80px' } },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid #2B2A28', paddingBottom: 14, marginBottom: 16 } },
-        h('h1', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 24, fontWeight: 600, margin: 0 } }, 'Ledger'),
-        h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#6B6558' } }, transactions.length + ' transactions saved')
-      ),
-      h('div', { style: { marginBottom: 16 } },
-        h(UploadBox, { onFile: onAddFile, compact: true }),
-        status ? h('p', { style: { fontSize: 12, color: '#6B6558', marginTop: 8 } }, status) : null
-      ),
-      h('div', { style: { display: 'flex', gap: 8, marginBottom: 20 } },
-        h('button', {
-          onClick: onBackup,
-          style: { flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 4, border: '1px solid #E3DCC9', background: 'white', color: '#2B2A28', cursor: 'pointer' },
-        }, 'Download backup'),
-        h('button', {
-          onClick: function () { restoreInputRef.current.click(); },
-          style: { flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 4, border: '1px solid #E3DCC9', background: 'white', color: '#2B2A28', cursor: 'pointer' },
-        }, 'Restore backup'),
-        h('input', {
-          ref: restoreInputRef, type: 'file', accept: 'application/json', style: { display: 'none' },
-          onChange: function (e) { onRestore(e.target.files[0]); e.target.value = ''; },
-        })
-      ),
-      h('div', { style: { display: 'flex', gap: 8, marginBottom: 28 } },
-        TabButton('overview', 'Overview'),
-        TabButton('trends', 'Trends')
-      ),
-      activeTab === 'overview' ? overviewPanel : trendsPanel
-    )
+    ),
+    h(ScreenFooter)
   );
 }
 
-function EmptyState(props) {
-  var onFile = props.onFile, error = props.error;
-  return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#FAF7F0', fontFamily: "'Inter', -apple-system, sans-serif", padding: 24 } },
-    h('h1', { style: { fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 32, fontWeight: 600, color: '#2B2A28', marginBottom: 8 } }, 'Ledger'),
-    h('p', { style: { color: '#6B6558', fontSize: 14, marginBottom: 32, textAlign: 'center', maxWidth: 320 } }, 'Upload your Caixadirecta export to get started.'),
-    h('div', { style: { width: '100%', maxWidth: 360 } }, h(UploadBox, { onFile: onFile })),
-    error ? h('p', { style: { color: '#8A4A3C', fontSize: 13, marginTop: 20, maxWidth: 320, textAlign: 'center' } }, error) : null,
-    h('p', { style: { color: '#9B9586', fontSize: 11, marginTop: 32, maxWidth: 320, textAlign: 'center' } },
-      'Your data is saved in this browser on this device. Use "Download backup" regularly to avoid losing your manual category edits.')
+// --- Transactions screen ------------------------------------------------------
+
+function TransactionsScreen(props) {
+  var data = useLedgerData(props.transactions, props.overrides);
+  var filterCategoryState = useState(null);
+  var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
+
+  var filtered = useMemo(function () {
+    return data.categorized
+      .filter(function (tx) { return !filterCategory || tx.category === filterCategory; })
+      .sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
+  }, [data.categorized, filterCategory]);
+
+  var allCategories = useMemo(function () {
+    var set = {};
+    data.categorized.forEach(function (tx) { set[tx.category] = true; });
+    return Object.keys(set).sort();
+  }, [data.categorized]);
+
+  if (props.transactions.length === 0) {
+    return h(EmptyState, { onFile: props.onAddFile, error: props.error });
+  }
+
+  return h('div', { className: 'screen' },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
+      h('p', { className: 'section-title', style: { margin: 0 } }, filtered.length + ' transactions'),
+      filterCategory ? h('button', { className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setFilterCategory(null); } }, 'Clear filter') : null
+    ),
+    h('div', { style: { display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 } },
+      allCategories.map(function (c) {
+        return h('button', {
+          key: c,
+          onClick: function () { setFilterCategory(c === filterCategory ? null : c); },
+          className: 'btn-secondary',
+          style: {
+            flexShrink: 0, fontSize: 11,
+            background: c === filterCategory ? 'var(--text)' : 'var(--surface)',
+            color: c === filterCategory ? 'var(--bg)' : 'var(--text)',
+            borderColor: c === filterCategory ? 'var(--text)' : 'var(--border)',
+          },
+        }, c);
+      })
+    ),
+    filtered.length === 0
+      ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
+      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange }); }),
+    h(ScreenFooter)
   );
 }
+
+// --- Settings screen ------------------------------------------------------
+
+function SettingsScreen(props) {
+  var restoreInputRef = useRef(null);
+
+  return h('div', { className: 'screen' },
+    h('p', { className: 'section-title' }, 'Import data'),
+    h('div', { className: 'card', style: { marginBottom: 20 } },
+      h(UploadBox, { onFile: props.onAddFile, compact: true }),
+      props.status ? h('p', { style: { fontSize: 12, color: 'var(--muted)', marginTop: 8 } }, props.status) : null,
+      props.error ? h('p', { style: { fontSize: 12, color: 'var(--loss)', marginTop: 8 } }, props.error) : null
+    ),
+
+    h('p', { className: 'section-title' }, 'Backup'),
+    h('div', { className: 'card', style: { marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 } },
+      h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 4 } },
+        'Your data lives only in this browser. Download a backup occasionally so a cleared cache or new device doesn\u2019t lose your manual category edits.'),
+      h('div', { style: { display: 'flex', gap: 8 } },
+        h('button', { className: 'btn-secondary', style: { flex: 1 }, onClick: props.onBackup }, 'Download backup'),
+        h('button', { className: 'btn-secondary', style: { flex: 1 }, onClick: function () { restoreInputRef.current.click(); } }, 'Restore backup')
+      ),
+      h('input', {
+        ref: restoreInputRef, type: 'file', accept: 'application/json', style: { display: 'none' },
+        onChange: function (e) { props.onRestore(e.target.files[0]); e.target.value = ''; },
+      })
+    ),
+
+    h('p', { className: 'section-title' }, 'Appearance'),
+    h('div', { className: 'card', style: { marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+      h('span', { style: { fontSize: 13 } }, 'Theme'),
+      h('div', { style: { display: 'flex', gap: 6 } },
+        h('button', {
+          className: 'btn-secondary',
+          style: { background: props.theme === 'light' ? 'var(--text)' : 'var(--surface2)', color: props.theme === 'light' ? 'var(--bg)' : 'var(--text)' },
+          onClick: function () { props.onThemeChange('light'); },
+        }, 'Light'),
+        h('button', {
+          className: 'btn-secondary',
+          style: { background: props.theme === 'dark' ? 'var(--text)' : 'var(--surface2)', color: props.theme === 'dark' ? 'var(--bg)' : 'var(--text)' },
+          onClick: function () { props.onThemeChange('dark'); },
+        }, 'Dark')
+      )
+    ),
+
+    h('p', { className: 'section-title' }, 'Help'),
+    h('div', { className: 'card', style: { marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 } },
+      h('button', { className: 'btn-secondary', onClick: props.onOpenFAQ }, 'Frequently asked questions'),
+      h('button', { className: 'btn-secondary', onClick: props.onOpenVersion }, 'v' + APP_VERSION + ' \u00b7 Release notes')
+    ),
+
+    h(ScreenFooter)
+  );
+}
+
+// --- Top-level app shell ------------------------------------------------------
+
+var NAV_ITEMS = [
+  { id: 'overview', icon: '\ud83d\udcca', label: 'Overview' },
+  { id: 'trends', icon: '\ud83d\udcc8', label: 'Trends' },
+  { id: 'transactions', icon: '\ud83d\udccb', label: 'Transactions' },
+  { id: 'settings', icon: '\u2699\ufe0f', label: 'Settings' },
+];
 
 function App() {
   var transactionsState = useState(function () { return Object.values(loadStoredTransactions()); });
@@ -672,6 +1012,29 @@ function App() {
   var error = errorState[0], setError = errorState[1];
   var statusState = useState(null);
   var status = statusState[0], setStatus = statusState[1];
+  var screenState = useState('overview');
+  var screen = screenState[0], setScreen = screenState[1];
+  var themeState = useState(function () { return getStoredTheme(); });
+  var theme = themeState[0], setTheme = themeState[1];
+  var faqOpenState = useState(false);
+  var faqOpen = faqOpenState[0], setFaqOpen = faqOpenState[1];
+  var versionOpenState = useState(false);
+  var versionOpen = versionOpenState[0], setVersionOpen = versionOpenState[1];
+  var updateVersionState = useState(null);
+  var updateVersion = updateVersionState[0], setUpdateVersion = updateVersionState[1];
+
+  useEffect(function () { applyTheme(theme); }, [theme]);
+
+  useEffect(function () {
+    var timer = setTimeout(function () { checkForUpdate(setUpdateVersion); }, 2000);
+    var interval = setInterval(function () { checkForUpdate(setUpdateVersion); }, 5 * 60 * 1000);
+    return function () { clearTimeout(timer); clearInterval(interval); };
+  }, []);
+
+  var handleThemeChange = useCallback(function (t) {
+    setTheme(t);
+    setStoredTheme(t);
+  }, []);
 
   var handleFile = useCallback(function (text) {
     setError(null);
@@ -733,19 +1096,49 @@ function App() {
     reader.readAsText(file, 'utf-8');
   }, []);
 
-  if (transactions.length === 0) {
-    return h(EmptyState, { onFile: handleFile, error: error });
-  }
+  var screenProps = {
+    transactions: transactions, overrides: overrides, onCategoryChange: handleCategoryChange,
+    onAddFile: handleFile, status: status, error: error,
+  };
 
-  return h(Dashboard, {
-    transactions: transactions,
-    overrides: overrides,
-    onCategoryChange: handleCategoryChange,
-    onAddFile: handleFile,
-    status: status,
-    onBackup: handleBackup,
-    onRestore: handleRestore,
-  });
+  var screenEl;
+  if (screen === 'overview') screenEl = h(OverviewScreen, screenProps);
+  else if (screen === 'trends') screenEl = h(TrendsScreen, screenProps);
+  else if (screen === 'transactions') screenEl = h(TransactionsScreen, screenProps);
+  else screenEl = h(SettingsScreen, Object.assign({}, screenProps, {
+    onBackup: handleBackup, onRestore: handleRestore,
+    theme: theme, onThemeChange: handleThemeChange,
+    onOpenFAQ: function () { setFaqOpen(true); }, onOpenVersion: function () { setVersionOpen(true); },
+  }));
+
+  return h('div', { id: 'app' },
+    updateVersion ? h(UpdateBanner, { newVersion: updateVersion }) : null,
+    h('div', { className: 'topbar' },
+      h('div', { className: 'logo' }, 'L'),
+      h('div', { className: 'topbar-text' },
+        h('h1', null, 'Ledger'),
+        h('p', null, transactions.length + ' transactions saved')
+      ),
+      h('button', { className: 'icon-btn', onClick: function () { setFaqOpen(true); } }, '\ud83d\udca1'),
+      h('button', { className: 'icon-btn', onClick: function () { handleThemeChange(theme === 'dark' ? 'light' : 'dark'); } },
+        theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19')
+    ),
+    h('div', { id: 'main' }, screenEl),
+    h('nav', { className: 'bottomnav' },
+      NAV_ITEMS.map(function (item) {
+        return h('button', {
+          key: item.id,
+          className: 'nav-item' + (screen === item.id ? ' active' : ''),
+          onClick: function () { setScreen(item.id); },
+        },
+          h('span', { className: 'icon' }, item.icon),
+          item.label
+        );
+      })
+    ),
+    faqOpen ? h(FAQModal, { onClose: function () { setFaqOpen(false); } }) : null,
+    versionOpen ? h(VersionModal, { onClose: function () { setVersionOpen(false); } }) : null
+  );
 }
 
 var root = ReactDOM.createRoot(document.getElementById('root'));
