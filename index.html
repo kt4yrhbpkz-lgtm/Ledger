@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Ledger" />
 <meta name="theme-color" content="#FAF7F0" />
 <script>
@@ -13,6 +14,14 @@
   // that happened because the meta tag only used to update after React's
   // first render (i.e. after the page had already painted once with the
   // wrong, hardcoded light-theme color).
+  //
+  // This matters even more when the app is opened from an iOS home-screen
+  // icon ("Add to Home Screen") rather than Safari directly — iOS PWAs can
+  // show a stale status-bar/splash color from whenever the icon was first
+  // added, on top of this. apple-mobile-web-app-status-bar-style above
+  // (black-translucent) tells iOS to let the page's own background show
+  // through the status bar area instead of using a separately-cached color,
+  // which is the more reliable fix for that specific case.
   (function () {
     try {
       var theme = localStorage.getItem('ledger:theme') || 'light';
@@ -211,9 +220,21 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.11.0';
+var APP_VERSION = '1.12.2';
 
 var CHANGELOG = [
+  { version: '1.12.2', notes: [
+    'Adicionada configuração específica para quando a app é aberta a partir do ícone na tela de início (Add to Home Screen), para evitar que a área da barra de estado mostre uma cor clara presa do momento em que o ícone foi criado, mesmo com o tema escuro ativo',
+  ]},
+  { version: '1.12.1', notes: [
+    '"Categorize merchants" passa a ordenar os comerciantes pela data da transação não classificada mais recente, em vez do total gasto',
+  ]},
+  { version: '1.12.0', notes: [
+    'Novo aviso, visível em qualquer separador, quando ainda não há nenhuma transação importada para o mês atual',
+  ]},
+  { version: '1.11.1', notes: [
+    'Corrigido: as datas em "Categorize merchants" e no ecrã de confirmação em massa não mostravam o ano, o que era ambíguo quando a lista abrangia vários anos',
+  ]},
   { version: '1.11.0', notes: [
     'Ao categorizar uma transação que afeta várias do mesmo comerciante, há agora uma opção "Just this one transaction" para aplicar a categoria só a essa, sem tocar nas outras',
     'Novo: podes adicionar uma nota de texto livre a qualquer transação, para detalhes que uma categoria não consegue captar',
@@ -325,6 +346,8 @@ var FAQ_ITEMS = [
     a: 'Sim. Quando isso aconteceria afetar mais do que uma transação, aparece a opção "Just this one transaction" no ecrã de confirmação, junto a "Apply to all" e "Cancel" \u2014 escolhe essa para mudar só a transação em que tocaste, mantendo as restantes como estavam.' },
   { q: 'Como adiciono uma nota a uma transação?',
     a: 'Toca na transação para abrir as opções de categoria, depois toca em "Add note" (ou "Edit note" se já tiver uma). Escreve o que quiseres e toca em Guardar. Transações com nota mostram um pequeno \ud83d\udcdd ao lado da descrição, e a nota aparece em itálico por baixo \u2014 toca nela para editar.' },
+  { q: 'Porque aparece um aviso a dizer que não há transações para o mês atual?',
+    a: 'A app verifica automaticamente se já tens transações importadas para o mês civil em que realmente estamos hoje. Se não tiveres nenhuma, mostra um aviso em qualquer separador a lembrar para exportares e importares o extrato mais recente da Caixadirecta. O aviso desaparece sozinho assim que importares pelo menos uma transação desse mês.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -501,6 +524,16 @@ function formatDate(iso) {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
+// Same as formatDate but includes the year — used in contexts that can span
+// multiple months or years (e.g. the uncategorized-merchants review, which
+// isn't scoped to a single month like the rest of the app), where "20 Jun"
+// alone would be genuinely ambiguous about which year it refers to.
+function formatDateWithYear(iso) {
+  var parts = iso.split('-').map(Number);
+  var y = parts[0], m = parts[1], d = parts[2];
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function monthKey(iso) {
   return iso.slice(0, 7);
 }
@@ -509,6 +542,25 @@ function monthLabel(key) {
   var parts = key.split('-').map(Number);
   var y = parts[0], m = parts[1];
   return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+// The real calendar month right now, in the same 'YYYY-MM' shape as
+// monthKey() — used to detect when the most recent imported data is
+// stale relative to today, regardless of which month the person happens
+// to be viewing inside the app.
+function getCurrentMonthKey() {
+  var now = new Date();
+  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+}
+
+// True as soon as the calendar has rolled into a new month and there isn't
+// yet a single transaction recorded for it — deliberately strict (no grace
+// period) per the chosen behavior: the moment it's a new month, if nothing's
+// been imported for it, the person should know.
+function isDataStale(months) {
+  if (months.length === 0) return false; // no data at all yet — handled by the empty state, not this warning
+  var newestMonth = months[0]; // months is sorted newest-first everywhere it's built
+  return newestMonth < getCurrentMonthKey();
 }
 
 // --- Storage (localStorage, browser-native, this device only) -----------
@@ -1152,7 +1204,7 @@ function BulkCategoryConfirmModal(props) {
             background: isTrigger ? 'var(--surface2)' : 'transparent',
           },
         },
-          h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDate(tx.dateMov)),
+          h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDateWithYear(tx.dateMov)),
           h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
             tx.description, isTrigger ? h('span', { style: { color: 'var(--accent)', fontSize: 11 } }, ' \u2014 this one') : null),
           h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
@@ -1182,6 +1234,23 @@ function ScreenFooter() {
   return h('div', { className: 'screen-footer' },
     h('div', null, '\u00a9 ' + new Date().getFullYear() + ' Ledger'),
     h('div', null, 'v' + APP_VERSION)
+  );
+}
+
+// Banner warning that the most recent imported data doesn't cover the
+// current calendar month yet — shown across every screen (not just
+// Overview) so it's hard to miss regardless of where the person lands.
+function StaleDataBanner(props) {
+  return h('div', {
+    style: {
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '12px 18px',
+      background: 'rgba(247, 201, 72, 0.12)', border: '1px solid rgba(247, 201, 72, 0.35)',
+      borderRadius: 12, fontSize: 12, color: 'var(--text)',
+    },
+  },
+    h('span', { style: { fontSize: 16, flexShrink: 0 } }, '\u26a0\ufe0f'),
+    h('span', { style: { flex: 1, lineHeight: 1.4 } },
+      'No transactions imported yet for ', h('strong', null, monthLabel(getCurrentMonthKey())), '. Export and upload your latest CGD statement to stay up to date.')
   );
 }
 
@@ -1701,8 +1770,12 @@ function ReviewUncategorized(props) {
     });
     Object.values(byFragment).forEach(function (g) {
       g.transactions.sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
+      g.mostRecentDate = g.transactions[0].dateMov; // transactions are sorted newest-first above
     });
-    return Object.values(byFragment).sort(function (a, b) { return b.total - a.total; });
+    // Most recent uncategorized transaction first, regardless of how much
+    // was spent — a merchant seen yesterday should surface before one only
+    // seen months ago, even if the older one adds up to a bigger total.
+    return Object.values(byFragment).sort(function (a, b) { return a.mostRecentDate < b.mostRecentDate ? 1 : -1; });
   }, [categorized]);
 
   var pickerOpenFor = useState(null);
@@ -1753,7 +1826,7 @@ function ReviewUncategorized(props) {
                   borderBottom: i < g.transactions.length - 1 ? '1px solid var(--border)' : 'none',
                 },
               },
-                h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDate(tx.dateMov)),
+                h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDateWithYear(tx.dateMov)),
                 h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
                 h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
                   (tx.amount < 0 ? '' : '+') + formatEUR(tx.amount))
@@ -2150,6 +2223,11 @@ function App() {
     notes: notes, onSetNote: handleSetNote,
   };
 
+  // Computed once here (not per-screen) so every screen shows the same
+  // up-to-date/stale state without each duplicating the same grouping logic.
+  var monthsForStaleCheck = useLedgerData(transactions, overrides).months;
+  var isStale = isDataStale(monthsForStaleCheck);
+
   var screenEl;
   if (screen === 'overview') screenEl = h(OverviewScreen, screenProps);
   else if (screen === 'trends') screenEl = h(TrendsScreen, screenProps);
@@ -2171,6 +2249,7 @@ function App() {
       h('button', { className: 'icon-btn', onClick: function () { handleThemeChange(theme === 'dark' ? 'light' : 'dark'); } },
         theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19')
     ),
+    isStale ? h(StaleDataBanner) : null,
     h('div', { id: 'main', ref: mainRef },
       pullState !== 'idle' ? h('div', {
         style: {
