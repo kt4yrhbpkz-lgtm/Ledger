@@ -220,9 +220,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.12.2';
+var APP_VERSION = '1.13.0';
 
 var CHANGELOG = [
+  { version: '1.13.0', notes: [
+    'Quando confirmas uma categorização em massa (afetando várias transações do mesmo comerciante), essa categoria passa a ser aplicada automaticamente a qualquer transação futura desse comerciante, sem precisares de repetir a ação',
+    'Categorizar uma transação única, ou escolher "Just this one transaction", continua a afetar só essa transação \u2014 não cria uma regra permanente',
+  ]},
   { version: '1.12.2', notes: [
     'Adicionada configuração específica para quando a app é aberta a partir do ícone na tela de início (Add to Home Screen), para evitar que a área da barra de estado mostre uma cor clara presa do momento em que o ícone foi criado, mesmo com o tema escuro ativo',
   ]},
@@ -348,6 +352,8 @@ var FAQ_ITEMS = [
     a: 'Toca na transação para abrir as opções de categoria, depois toca em "Add note" (ou "Edit note" se já tiver uma). Escreve o que quiseres e toca em Guardar. Transações com nota mostram um pequeno \ud83d\udcdd ao lado da descrição, e a nota aparece em itálico por baixo \u2014 toca nela para editar.' },
   { q: 'Porque aparece um aviso a dizer que não há transações para o mês atual?',
     a: 'A app verifica automaticamente se já tens transações importadas para o mês civil em que realmente estamos hoje. Se não tiveres nenhuma, mostra um aviso em qualquer separador a lembrar para exportares e importares o extrato mais recente da Caixadirecta. O aviso desaparece sozinho assim que importares pelo menos uma transação desse mês.' },
+  { q: 'Se categorizar várias transações de um comerciante de uma vez, isso aplica-se a transações futuras desse mesmo comerciante?',
+    a: 'Sim, mas só nesse caso específico. Quando confirmas "Apply to all" num ecrã que afeta mais do que uma transação do mesmo comerciante, a app guarda essa escolha como regra permanente \u2014 qualquer transação futura desse comerciante recebe automaticamente a mesma categoria, sem precisares de repetir a ação. Já categorizar uma transação isolada, ou escolher "Just this one transaction", afeta só essa transação e não cria nenhuma regra permanente, porque pode ter sido um caso pontual que não queres repetir para sempre.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -495,9 +501,17 @@ function merchantFragment(description) {
 var SALARY_SENDER_PATTERN = /TFI JOANA FILIPA TAVA/i;
 var SALARY_MIN_AMOUNT = 1500;
 
-function autoCategory(description, amount) {
+function autoCategory(description, amount, merchantRules) {
   if (typeof amount === 'number' && amount >= SALARY_MIN_AMOUNT && SALARY_SENDER_PATTERN.test(description)) {
     return 'Salary';
+  }
+  // A standing rule from a past bulk-categorization takes priority over the
+  // generic keyword list, but never overrides the salary check above —
+  // salary detection is a structural fact about the transaction (sender +
+  // amount), not something a merchant-name rule should be able to shadow.
+  if (merchantRules) {
+    var fragment = merchantFragment(description);
+    if (merchantRules[fragment]) return merchantRules[fragment];
   }
   for (var i = 0; i < RULES.length; i++) {
     if (RULES[i].test(description)) return RULES[i].category;
@@ -569,6 +583,7 @@ var TX_KEY = 'ledger:transactions';
 var OVERRIDES_KEY = 'ledger:category-overrides';
 var CUSTOM_CATEGORIES_KEY = 'ledger:custom-categories';
 var NOTES_KEY = 'ledger:notes';
+var MERCHANT_RULES_KEY = 'ledger:merchant-rules';
 
 function loadStoredTransactions() {
   try {
@@ -624,6 +639,26 @@ function loadNotes() {
 
 function saveNotes(notes) {
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+// Standing fragment -> category rules, created only when a bulk
+// categorization (affecting more than one transaction) is confirmed —
+// never from a single-transaction edit, since a one-off edit might just be
+// a one-off and shouldn't silently start auto-categorizing every future
+// transaction from that merchant. These are checked before the keyword
+// RULES list, but after a per-transaction override, when a transaction is
+// first categorized.
+function loadMerchantRules() {
+  try {
+    var raw = localStorage.getItem(MERCHANT_RULES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveMerchantRules(rules) {
+  localStorage.setItem(MERCHANT_RULES_KEY, JSON.stringify(rules));
 }
 
 function downloadJSON(filename, data) {
@@ -1256,16 +1291,16 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides) {
+function useLedgerData(transactions, overrides, merchantRules) {
   var categorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       return Object.assign({}, tx, {
-        category: override || autoCategory(tx.description, tx.amount),
+        category: override || autoCategory(tx.description, tx.amount, merchantRules),
         isOverride: Boolean(override),
       });
     });
-  }, [transactions, overrides]);
+  }, [transactions, overrides, merchantRules]);
 
   var months = useMemo(function () {
     var set = {};
@@ -1321,7 +1356,7 @@ function shortMonthLabel(key) {
 // --- Overview screen ------------------------------------------------------
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
   var selectedMonthState = useState(null);
   var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
   var categoryFilterState = useState(null);
@@ -1584,7 +1619,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
 
@@ -1696,7 +1731,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
   var filterCategoryState = useState(null);
   var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
 
@@ -1873,14 +1908,14 @@ function ReviewUncategorized(props) {
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
 
   var handleBulkAssign = useCallback(function (fragment, category) {
     // The central onCategoryChange handler already tags every transaction
     // sharing the same merchant fragment, so finding one matching transaction
     // and calling it once is enough — no need to loop here ourselves.
     var match = props.transactions.find(function (tx) {
-      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount)) !== -1 && merchantFragment(tx.description) === fragment;
+      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount, props.merchantRules)) !== -1 && merchantFragment(tx.description) === fragment;
     });
     if (match) props.onCategoryChange(match.id, category);
   }, [props.transactions, props.onCategoryChange]);
@@ -1957,6 +1992,8 @@ function App() {
   var customCategories = customCategoriesState[0], setCustomCategories = customCategoriesState[1];
   var notesState = useState(function () { return loadNotes(); });
   var notes = notesState[0], setNotes = notesState[1];
+  var merchantRulesState = useState(function () { return loadMerchantRules(); });
+  var merchantRules = merchantRulesState[0], setMerchantRules = merchantRulesState[1];
   var errorState = useState(null);
   var error = errorState[0], setError = errorState[1];
   var statusState = useState(null);
@@ -2107,6 +2144,24 @@ function App() {
     });
   }
 
+  // Only called from a confirmed multi-transaction bulk action (the "Apply
+  // to all N" button) — never from the single-transaction auto-apply
+  // shortcut in handleCategoryChange below, even though that path also
+  // calls applyCategoryToFragment. The difference matters: auto-applying to
+  // a single transaction because nothing else currently shares its fragment
+  // isn't the same as a person deliberately confirming "yes, categorize
+  // this whole recurring merchant" — only the latter should create a
+  // standing rule that silently affects every future import.
+  function applyCategoryToFragmentAndRemember(fragment, category) {
+    applyCategoryToFragment(fragment, category);
+    setMerchantRules(function (prev) {
+      var next = Object.assign({}, prev);
+      next[fragment] = category;
+      saveMerchantRules(next);
+      return next;
+    });
+  }
+
   function applyCategoryToSingleTransaction(id, category) {
     setOverrides(function (prev) {
       var next = Object.assign({}, prev);
@@ -2134,7 +2189,7 @@ function App() {
 
   var handleConfirmCategoryChange = useCallback(function () {
     if (!pendingCategoryChange) return;
-    applyCategoryToFragment(pendingCategoryChange.fragment, pendingCategoryChange.category);
+    applyCategoryToFragmentAndRemember(pendingCategoryChange.fragment, pendingCategoryChange.category);
     setPendingCategoryChange(null);
   }, [pendingCategoryChange]);
 
@@ -2190,6 +2245,7 @@ function App() {
       overrides: loadOverrides(),
       customCategories: loadCustomCategories(),
       notes: loadNotes(),
+      merchantRules: loadMerchantRules(),
       exportedAt: new Date().toISOString(),
     });
   }, []);
@@ -2205,10 +2261,12 @@ function App() {
         saveOverrides(data.overrides || {});
         saveCustomCategories(data.customCategories || []);
         saveNotes(data.notes || {});
+        saveMerchantRules(data.merchantRules || {});
         setTransactions(Object.values(data.transactions));
         setOverrides(data.overrides || {});
         setCustomCategories(data.customCategories || []);
         setNotes(data.notes || {});
+        setMerchantRules(data.merchantRules || {});
         setStatus('Backup restored.');
       } catch (err) {
         setError('Could not restore that file: ' + err.message);
@@ -2220,12 +2278,12 @@ function App() {
   var screenProps = {
     transactions: transactions, overrides: overrides, onCategoryChange: handleCategoryChange,
     onAddFile: handleFile, status: status, error: error, categories: allCategoriesCombined, onCreateCategory: handleCreateCategory,
-    notes: notes, onSetNote: handleSetNote,
+    notes: notes, onSetNote: handleSetNote, merchantRules: merchantRules,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
