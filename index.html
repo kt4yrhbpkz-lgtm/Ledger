@@ -1022,6 +1022,9 @@ function App() {
   var versionOpen = versionOpenState[0], setVersionOpen = versionOpenState[1];
   var updateVersionState = useState(null);
   var updateVersion = updateVersionState[0], setUpdateVersion = updateVersionState[1];
+  var pullStateState = useState('idle'); // 'idle' | 'pulling' | 'checking'
+  var pullState = pullStateState[0], setPullState = pullStateState[1];
+  var mainRef = useRef(null);
 
   useEffect(function () { applyTheme(theme); }, [theme]);
 
@@ -1029,6 +1032,56 @@ function App() {
     var timer = setTimeout(function () { checkForUpdate(setUpdateVersion); }, 2000);
     var interval = setInterval(function () { checkForUpdate(setUpdateVersion); }, 5 * 60 * 1000);
     return function () { clearTimeout(timer); clearInterval(interval); };
+  }, []);
+
+  // Pull-to-refresh: only triggers when the scroll container is already at
+  // the top and the user pulls down further (a gesture that does nothing
+  // useful otherwise), so it never fights with normal scrolling.
+  useEffect(function () {
+    var el = mainRef.current;
+    if (!el) return;
+    var startY = null;
+    var triggered = false;
+    var PULL_THRESHOLD = 70;
+
+    function onTouchStart(e) {
+      if (el.scrollTop <= 0) {
+        startY = e.touches[0].clientY;
+        triggered = false;
+      } else {
+        startY = null;
+      }
+    }
+    function onTouchMove(e) {
+      if (startY === null || triggered) return;
+      var delta = e.touches[0].clientY - startY;
+      if (delta > 8) setPullState('pulling');
+      if (delta > PULL_THRESHOLD) {
+        triggered = true;
+        setPullState('checking');
+        checkForUpdate(function (v) {
+          setUpdateVersion(v);
+          setPullState('idle');
+        });
+        // If no update is found, checkForUpdate's promise chain resolves
+        // silently (no callback fires) — clear the indicator after a beat
+        // either way so it doesn't get stuck on "checking...".
+        setTimeout(function () { setPullState('idle'); }, 2500);
+      }
+    }
+    function onTouchEnd() {
+      startY = null;
+      if (!triggered) setPullState('idle');
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return function () {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
   }, []);
 
   var handleThemeChange = useCallback(function (t) {
@@ -1123,7 +1176,15 @@ function App() {
       h('button', { className: 'icon-btn', onClick: function () { handleThemeChange(theme === 'dark' ? 'light' : 'dark'); } },
         theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19')
     ),
-    h('div', { id: 'main' }, screenEl),
+    h('div', { id: 'main', ref: mainRef },
+      pullState !== 'idle' ? h('div', {
+        style: {
+          textAlign: 'center', padding: '10px 0', fontSize: 11, fontFamily: 'var(--mono)',
+          color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+        },
+      }, pullState === 'checking' ? 'Checking for updates\u2026' : 'Release to check for updates') : null,
+      screenEl
+    ),
     h('nav', { className: 'bottomnav' },
       NAV_ITEMS.map(function (item) {
         return h('button', {
