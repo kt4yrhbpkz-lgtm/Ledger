@@ -115,6 +115,19 @@ button { font-family: var(--sans); }
   background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px 20px;
   box-shadow: 0 2px 10px rgba(var(--shadow-rgb, 0,0,0), 0.05);
 }
+.card-glass {
+  background: rgba(var(--surface-rgb), 0.55);
+  border: 1px solid rgba(var(--surface-rgb), 0.4);
+  border-radius: 22px; padding: 18px 20px;
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb, 0,0,0), 0.12);
+}
+.screen-gradient {
+  background: radial-gradient(circle at 15% 0%, rgba(124, 90, 245, 0.18), transparent 55%),
+              radial-gradient(circle at 85% 10%, rgba(79, 142, 247, 0.14), transparent 50%),
+              var(--bg);
+  margin: -20px -18px; padding: 20px 18px;
+}
 .section-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
 
 .sheet-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-end; }
@@ -137,6 +150,19 @@ button { font-family: var(--sans); }
 
 .screen-footer { text-align: center; margin-top: 28px; padding: 12px 0 4px; opacity: 0.6; }
 .screen-footer div { font-size: 10px; color: var(--muted); }
+
+.scroll-top-btn {
+  position: fixed; right: 18px; bottom: calc(var(--nav-h) + var(--safe-bottom) + 18px);
+  width: 46px; height: 46px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; color: #fff; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  z-index: 50; cursor: pointer;
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.scroll-top-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
 @keyframes donutGrow {
   from { transform: scale(0.85); opacity: 0; }
@@ -181,9 +207,34 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.8.0';
 
 var CHANGELOG = [
+  { version: '1.8.0', notes: [
+    'Os gráficos de linha em Tendências agora respondem a toque/arrastar: mostram uma linha-guia e um balão com o valor exato do ponto selecionado',
+    'Novo visual "vidro" (cartões translúcidos com desfoque, sobre um fundo gradiente) aplicado ao Resumo e às Tendências',
+  ]},
+  { version: '1.7.0', notes: [
+    'Ao escolher uma categoria, é possível criar uma nova categoria personalizada com o botão "+ New category"',
+    'Em Definições \u2192 "Categorize merchants", tocar num comerciante mostra agora as transações individuais (com data e valor), além da opção de categoria',
+    'Perguntas frequentes atualizadas para refletir o reconhecimento de sal\u00e1rio, a categorização por comerciante, a confirmação em massa e as categorias personalizadas',
+    'Cópias de seguran\u00e7a (backup/restore) passam a incluir as categorias personalizadas criadas',
+  ]},
+  { version: '1.6.0', notes: [
+    'Novo botão flutuante para voltar ao topo, visível depois de fazer scroll para baixo em qualquer separador',
+  ]},
+  { version: '1.5.0', notes: [
+    'Antes de aplicar uma categoria a v\u00e1rias transações do mesmo comerciante, a app agora mostra quantas serão afetadas e a lista completa, pedindo confirmação',
+    'Categorizar uma transação \u00fanica (sem outras correspondências) continua a aplicar-se de imediato, sem pedir confirmação',
+  ]},
+  { version: '1.4.0', notes: [
+    'Removido: deslizar para os lados já não muda de separador',
+    'No Resumo, deslizar para os lados agora muda de mês',
+    'Categorizar uma transação aplica automaticamente a mesma categoria a todas as transações do mesmo comerciante',
+    'Reconhecimento automático de salário: transferências de Joana Filipa Tavares acima de 1500\u20ac são marcadas como Sal\u00e1rio',
+    'Resumo reorganizado: sal\u00e1rio, outros rendimentos, gastos e investido, com saldo l\u00edquido do m\u00eas',
+    'Novo gr\u00e1fico de barras a comparar rendimentos, gastos e investido, junto ao gr\u00e1fico circular',
+  ]},
   { version: '1.3.0', notes: [
     'Corrigido: o cabeçalho e o menu inferior não mudavam de cor no tema escuro',
     'Cabeçalho redesenhado \u2014 sem caixa de logótipo, nome em gradiente, botões mais discretos',
@@ -217,13 +268,21 @@ var CHANGELOG = [
 
 var FAQ_ITEMS = [
   { q: 'Como funciona a categorização automática?',
-    a: 'A app procura por palavras-chave conhecidas na descrição de cada transação (ex: "VIA VERDE", "UBER", "FARMACIA") e atribui uma categoria com base na primeira correspondência. Transações que não correspondem a nenhuma regra ficam como "Other" ou "Card Purchase (uncategorized)". Podes corrigir manualmente qualquer transação tocando nela.' },
+    a: 'A app procura por palavras-chave conhecidas na descrição de cada transação (ex: "VIA VERDE", "UBER", "FARMACIA") e atribui uma categoria com base na primeira correspondência. Transferências da Joana Filipa Tavares acima de 1500\u20ac são automaticamente marcadas como Sal\u00e1rio. Transações que não correspondem a nenhuma regra ficam como "Other" ou "Card Purchase (uncategorized)". Podes corrigir manualmente qualquer transação tocando nela.' },
+  { q: 'O que acontece quando categorizo manualmente uma transação?',
+    a: 'A categoria escolhida é aplicada a essa transação e a todas as outras com o mesmo nome de comerciante (depois de remover prefixos genéricos do CGD). Se isso afetar mais do que uma transação, a app mostra a lista completa e pede confirmação antes de aplicar. Se for a única correspondência, aplica-se de imediato.' },
+  { q: 'Posso criar as minhas próprias categorias?',
+    a: 'Sim. Ao escolher uma categoria para uma transação, existe a opção "+ New category" no final da lista \u2014 escreve o nome que quiseres e fica disponível para usar em qualquer transação a partir daí.' },
   { q: 'As correções manuais de categoria mantêm-se?',
     a: 'Sim. Qualquer categoria que escolhas manualmente é guardada separadamente e tem sempre prioridade sobre a categorização automática, mesmo que reimportes o mesmo ficheiro mais tarde.' },
   { q: 'Posso importar o mesmo ficheiro várias vezes?',
     a: 'Sim, sem problema. Cada transação tem um identificador baseado na data, valor e descrição, por isso transações já guardadas são automaticamente ignoradas em importações repetidas — não vais ter duplicados.' },
+  { q: 'O que é a ferramenta "Categorize merchants" nas Definições?',
+    a: 'Mostra todos os comerciantes ainda sem categoria definida, agrupados, com o número de transações e o total gasto em cada um. Tocar num comerciante mostra a lista de transações individuais (com data e valor) e permite escolher uma categoria para todas de uma vez.' },
   { q: 'Onde ficam guardados os meus dados?',
     a: 'Tudo fica guardado localmente neste navegador, neste dispositivo (localStorage). Nada é enviado para nenhum servidor. Isto significa que limpar os dados do navegador, ou usar outro dispositivo, não mantém os teus dados — usa o botão de backup nas Definições regularmente.' },
+  { q: 'Como vejo o valor exato de um ponto num gráfico de linha?',
+    a: 'Toca e arrasta o dedo sobre o gráfico, em Tendências. Aparece uma linha vertical e um balão com a data e o valor exato nesse ponto, que se atualiza enquanto arrastas.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -339,7 +398,7 @@ var NON_SPENDING_CATEGORIES = ['Investments'];
 
 var ALL_CATEGORIES = RULES.map(function (r) { return r.category; })
   .filter(function (c, i, arr) { return arr.indexOf(c) === i; })
-  .concat(['Other']);
+  .concat(['Salary', 'Other']);
 
 // Strips CGD's generic prefixes/trailing codes so similar truncated merchant
 // strings (e.g. "COMPRAS C.DEB TROPICA") group together by their actual
@@ -350,7 +409,16 @@ function merchantFragment(description) {
   return d || description.trim();
 }
 
-function autoCategory(description) {
+// Recurring salary payment: TFI from Joana Filipa Tavares, above the
+// threshold that distinguishes a payroll deposit from her smaller, more
+// frequent reimbursement-style transfers (which stay generic "Income / Transfers In").
+var SALARY_SENDER_PATTERN = /TFI JOANA FILIPA TAVA/i;
+var SALARY_MIN_AMOUNT = 1500;
+
+function autoCategory(description, amount) {
+  if (typeof amount === 'number' && amount >= SALARY_MIN_AMOUNT && SALARY_SENDER_PATTERN.test(description)) {
+    return 'Salary';
+  }
   for (var i = 0; i < RULES.length; i++) {
     if (RULES[i].test(description)) return RULES[i].category;
   }
@@ -390,6 +458,7 @@ function monthLabel(key) {
 
 var TX_KEY = 'ledger:transactions';
 var OVERRIDES_KEY = 'ledger:category-overrides';
+var CUSTOM_CATEGORIES_KEY = 'ledger:custom-categories';
 
 function loadStoredTransactions() {
   try {
@@ -415,6 +484,21 @@ function loadOverrides() {
 
 function saveOverrides(overrides) {
   localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// User-created categories, kept separate from the built-in RULES-derived
+// list so a custom name survives even if the built-in list ever changes.
+function loadCustomCategories() {
+  try {
+    var raw = localStorage.getItem(CUSTOM_CATEGORIES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomCategories(list) {
+  localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(list));
 }
 
 function downloadJSON(filename, data) {
@@ -482,16 +566,32 @@ function CategoryBar(props) {
 }
 
 function TransactionRow(props) {
-  var tx = props.tx, onCategoryChange = props.onCategoryChange;
+  var tx = props.tx, onCategoryChange = props.onCategoryChange, categories = props.categories || ALL_CATEGORIES;
+  var onCreateCategory = props.onCreateCategory;
   var editingState = useState(false);
   var editing = editingState[0], setEditing = editingState[1];
+  var creatingState = useState(false);
+  var creating = creatingState[0], setCreating = creatingState[1];
+  var newNameState = useState('');
+  var newName = newNameState[0], setNewName = newNameState[1];
   var isPositive = tx.amount > 0;
+
+  function handleCreateAndApply() {
+    if (!onCreateCategory) return;
+    var created = onCreateCategory(newName);
+    if (created) {
+      onCategoryChange(tx.id, created);
+      setCreating(false);
+      setNewName('');
+      setEditing(false);
+    }
+  }
 
   return h('div', { style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
     h('div', { style: { display: 'grid', gridTemplateColumns: '60px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 } },
       h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
       h('span', {
-        onClick: function () { setEditing(!editing); },
+        onClick: function () { setEditing(!editing); setCreating(false); },
         style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', cursor: 'pointer' },
         title: tx.description,
       },
@@ -503,7 +603,7 @@ function TransactionRow(props) {
         (isPositive ? '+' : '') + formatEUR(tx.amount))
     ),
     editing ? h('div', { style: { marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 } },
-      ALL_CATEGORIES.map(function (c) {
+      categories.map(function (c) {
         return h('button', {
           key: c,
           onClick: function () { onCategoryChange(tx.id, c); setEditing(false); },
@@ -515,7 +615,28 @@ function TransactionRow(props) {
             cursor: 'pointer',
           },
         }, c);
-      })
+      }),
+      onCreateCategory ? h('button', {
+        onClick: function () { setCreating(true); },
+        style: {
+          fontSize: 11, padding: '5px 10px', borderRadius: 10,
+          border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+        },
+      }, '+ New category') : null
+    ) : null,
+    (editing && creating) ? h('div', { style: { marginTop: 8, display: 'flex', gap: 6 } },
+      h('input', {
+        type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
+        onChange: function (e) { setNewName(e.target.value); },
+        onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndApply(); },
+        style: {
+          flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+        },
+      }),
+      h('button', {
+        onClick: handleCreateAndApply, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
+      }, 'Add')
     ) : null
   );
 }
@@ -589,41 +710,134 @@ function LineChart(props) {
     var areaPath = points.length > 1
       ? linePath + ' L ' + points[points.length - 1].x + ' ' + (padding.top + innerH) + ' L ' + points[0].x + ' ' + (padding.top + innerH) + ' Z'
       : '';
-    return { color: color, points: points, linePath: linePath, areaPath: areaPath, gradientId: 'lg' + si + '_' + Math.round(Math.random() * 1e6) };
+    return { name: s.name, color: color, points: points, linePath: linePath, areaPath: areaPath, gradientId: 'lg' + si + '_' + Math.round(Math.random() * 1e6) };
   });
 
-  return h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block', overflow: 'visible' } },
-    h('defs', null,
-      seriesData.map(function (sd) {
-        return h('linearGradient', { key: sd.gradientId, id: sd.gradientId, x1: '0', y1: '0', x2: '0', y2: '1' },
-          h('stop', { offset: '0%', stopColor: sd.color, stopOpacity: 0.28 }),
-          h('stop', { offset: '100%', stopColor: sd.color, stopOpacity: 0 })
+  // --- Touch/drag crosshair --------------------------------------------
+  var activeIdxState = useState(null);
+  var activeIdx = activeIdxState[0], setActiveIdx = activeIdxState[1];
+  var containerRef = useRef(null);
+
+  function nearestIndexForClientX(clientX) {
+    var el = containerRef.current;
+    if (!el || labels.length === 0) return null;
+    var rect = el.getBoundingClientRect();
+    if (rect.width === 0) return null;
+    var svgX = ((clientX - rect.left) / rect.width) * width;
+    var closest = 0, closestDist = Infinity;
+    for (var i = 0; i < labels.length; i++) {
+      var dist = Math.abs(xPos(i) - svgX);
+      if (dist < closestDist) { closestDist = dist; closest = i; }
+    }
+    return closest;
+  }
+
+  function handleTouchMove(e) {
+    var idx = nearestIndexForClientX(e.touches[0].clientX);
+    if (idx !== null) setActiveIdx(idx);
+  }
+  function handleTouchEnd() {
+    setActiveIdx(null);
+  }
+
+  var tooltipLeftPct = activeIdx !== null ? (xPos(activeIdx) / width) * 100 : 0;
+  // Flip the tooltip to the other side once it would run past the chart's
+  // edge, so it never gets clipped by the container.
+  var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
+
+  return h('div', {
+    ref: containerRef,
+    style: { position: 'relative', touchAction: 'pan-y' },
+    onTouchStart: handleTouchMove,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleTouchEnd,
+  },
+    activeIdx !== null ? h('div', {
+      style: {
+        position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        boxShadow: '0 6px 18px rgba(' + cssVar('--shadow-rgb') + ', 0.18)',
+        fontSize: 11, whiteSpace: 'nowrap', zIndex: 2, pointerEvents: 'none',
+        left: tooltipAlign === 'left' ? '0%' : tooltipAlign === 'right' ? 'auto' : tooltipLeftPct + '%',
+        right: tooltipAlign === 'right' ? '0%' : 'auto',
+        transform: tooltipAlign === 'center' ? 'translateX(-50%)' : 'none',
+      },
+    },
+      h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
+      seriesData.map(function (sd, si) {
+        return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: sd.color, display: 'inline-block', flexShrink: 0 } }),
+          (sd.name ? sd.name + ': ' : '') + formatEUR(series[si].values[activeIdx].y)
         );
       })
-    ),
-    gridLines.map(function (gl, i) {
-      return h('g', { key: i },
-        h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
-        h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
-      );
-    }),
-    seriesData.map(function (sd, si) {
-      return h('path', { key: 'area' + si, d: sd.areaPath, fill: 'url(#' + sd.gradientId + ')', stroke: 'none' });
-    }),
-    seriesData.map(function (sd, si) {
-      return h('g', { key: 'line' + si },
-        h('path', { d: sd.linePath, fill: 'none', stroke: sd.color, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }),
-        sd.points.map(function (p, i) {
-          return h('circle', { key: i, cx: p.x, cy: p.y, r: 3, fill: cssVar('--surface'), stroke: sd.color, strokeWidth: 2 });
+    ) : null,
+    h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block', overflow: 'visible' } },
+      h('defs', null,
+        seriesData.map(function (sd) {
+          return h('linearGradient', { key: sd.gradientId, id: sd.gradientId, x1: '0', y1: '0', x2: '0', y2: '1' },
+            h('stop', { offset: '0%', stopColor: sd.color, stopOpacity: 0.28 }),
+            h('stop', { offset: '100%', stopColor: sd.color, stopOpacity: 0 })
+          );
         })
+      ),
+      gridLines.map(function (gl, i) {
+        return h('g', { key: i },
+          h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
+          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+        );
+      }),
+      seriesData.map(function (sd, si) {
+        return h('path', { key: 'area' + si, d: sd.areaPath, fill: 'url(#' + sd.gradientId + ')', stroke: 'none' });
+      }),
+      seriesData.map(function (sd, si) {
+        return h('g', { key: 'line' + si },
+          h('path', { d: sd.linePath, fill: 'none', stroke: sd.color, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+          sd.points.map(function (p, i) {
+            var isActive = activeIdx === i;
+            return h('circle', {
+              key: i, cx: p.x, cy: p.y, r: isActive ? 5 : 3,
+              fill: isActive ? sd.color : cssVar('--surface'), stroke: sd.color, strokeWidth: 2,
+              style: { transition: 'r 0.1s' },
+            });
+          })
+        );
+      }),
+      activeIdx !== null ? h('line', {
+        x1: xPos(activeIdx), x2: xPos(activeIdx), y1: padding.top, y2: padding.top + innerH,
+        stroke: cssVar('--muted'), strokeWidth: 1, strokeDasharray: '2 3',
+      }) : null,
+      labels.map(function (label, i) {
+        if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
+        return h('text', {
+          key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: cssVar('--muted'),
+          textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
+        }, label);
+      })
+    )
+  );
+}
+
+function SimpleBarChart(props) {
+  var data = props.data; // [{ label, value, color }]
+  var maxVal = Math.max.apply(null, data.map(function (d) { return d.value; }).concat([1]));
+
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+    data.map(function (d, i) {
+      var pct = maxVal > 0 ? (d.value / maxVal) * 100 : 0;
+      return h('div', { key: i },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 } },
+          h('span', { style: { color: 'var(--muted)' } }, d.label),
+          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 600 } }, formatEUR(d.value))
+        ),
+        h('div', { style: { height: 10, background: 'var(--surface2)', borderRadius: 6, overflow: 'hidden' } },
+          h('div', {
+            style: {
+              height: '100%', width: pct + '%', background: d.color, borderRadius: 6,
+              transition: 'width 0.6s ease-out',
+            },
+          })
+        )
       );
-    }),
-    labels.map(function (label, i) {
-      if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
-      return h('text', {
-        key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: cssVar('--muted'),
-        textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
-      }, label);
     })
   );
 }
@@ -801,6 +1015,41 @@ function VersionModal(props) {
   );
 }
 
+function BulkCategoryConfirmModal(props) {
+  var pending = props.pending; // { fragment, category, affected }
+  var sortedAffected = useMemo(function () {
+    return pending.affected.slice().sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
+  }, [pending.affected]);
+  var total = pending.affected.reduce(function (sum, t) { return sum + Math.abs(t.amount); }, 0);
+
+  return h(Sheet, { title: 'Confirm category change', onClose: props.onCancel },
+    h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 4, lineHeight: 1.5 } },
+      'This will set ', h('strong', null, pending.affected.length + ' transaction' + (pending.affected.length === 1 ? '' : 's')),
+      ' matching "', pending.fragment, '" to ', h('strong', null, pending.category), '.'),
+    h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 16 } }, 'Total: ' + formatEUR(total)),
+    h('div', { style: { maxHeight: 280, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 12 } },
+      sortedAffected.map(function (tx, i) {
+        return h('div', {
+          key: tx.id,
+          style: {
+            display: 'flex', justifyContent: 'space-between', gap: 10, padding: '10px 14px',
+            borderBottom: i < sortedAffected.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13,
+          },
+        },
+          h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDate(tx.dateMov)),
+          h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
+          h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
+            (tx.amount < 0 ? '' : '+') + formatEUR(tx.amount))
+        );
+      })
+    ),
+    h('div', { style: { display: 'flex', gap: 10 } },
+      h('button', { className: 'btn-secondary', style: { flex: 1 }, onClick: props.onCancel }, 'Cancel'),
+      h('button', { className: 'btn-primary', style: { flex: 1 }, onClick: props.onConfirm }, 'Apply to all')
+    )
+  );
+}
+
 function UpdateBanner(props) {
   return h('div', { className: 'update-banner' },
     h('span', null, 'Nova vers\u00e3o dispon\u00edvel (v' + props.newVersion + ')'),
@@ -822,7 +1071,7 @@ function useLedgerData(transactions, overrides) {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       return Object.assign({}, tx, {
-        category: override || autoCategory(tx.description),
+        category: override || autoCategory(tx.description, tx.amount),
         isOverride: Boolean(override),
       });
     });
@@ -881,6 +1130,7 @@ function OverviewScreen(props) {
   var categoryFilter = categoryFilterState[0], setCategoryFilter = categoryFilterState[1];
 
   var activeMonth = selectedMonth || data.months[0];
+  var activeMonthIdx = data.months.indexOf(activeMonth);
 
   // Changing month while a category filter is active would otherwise show a
   // filter label for a category that might not even exist in the new month —
@@ -889,6 +1139,39 @@ function OverviewScreen(props) {
     setSelectedMonth(m);
     setCategoryFilter(null);
   }, []);
+
+  // data.months is sorted newest-first, so "swipe left" (go forward in time,
+  // toward more recent months) moves to a LOWER index, and "swipe right"
+  // (go back in time) moves to a HIGHER index.
+  var goToAdjacentMonth = useCallback(function (direction) {
+    var idx = data.months.indexOf(selectedMonth || data.months[0]);
+    var nextIdx = direction === 'newer' ? idx - 1 : idx + 1;
+    if (nextIdx >= 0 && nextIdx < data.months.length) handleSelectMonth(data.months[nextIdx]);
+  }, [data.months, selectedMonth, handleSelectMonth]);
+
+  var swipeRef = useRef(null);
+  useEffect(function () {
+    var el = swipeRef.current;
+    if (!el) return;
+    var startX = null, startY = null;
+    var SWIPE_THRESHOLD = 50;
+
+    function onStart(e) { startX = e.touches[0].clientX; startY = e.touches[0].clientY; }
+    function onEnd(e) {
+      if (startX === null) return;
+      var endX = e.changedTouches[0].clientX, endY = e.changedTouches[0].clientY;
+      var dx = endX - startX, dy = endY - startY;
+      startX = null;
+      if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy)) return;
+      goToAdjacentMonth(dx < 0 ? 'newer' : 'older');
+    }
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    return function () {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchend', onEnd);
+    };
+  }, [goToAdjacentMonth]);
 
   var monthTx = useMemo(function () {
     return data.categorized
@@ -907,7 +1190,19 @@ function OverviewScreen(props) {
   }, [monthTx]);
 
   var totalSpent = spendingByCategory.reduce(function (sum, c) { return sum + c.amount; }, 0);
-  var totalIncome = monthTx.filter(function (tx) { return tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var salaryIncome = monthTx.filter(function (tx) { return tx.category === 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var totalIncome = salaryIncome + otherIncome;
+  var invested = monthTx.filter(function (tx) { return tx.category === 'Investments'; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var netBalance = totalIncome - totalSpent;
+
+  var balanceChartData = useMemo(function () {
+    return [
+      { label: 'In', value: totalIncome, color: 'var(--gain)' },
+      { label: 'Spent', value: totalSpent, color: 'var(--loss)' },
+      { label: 'Invested', value: invested, color: 'var(--accent2)' },
+    ];
+  }, [totalIncome, totalSpent, invested]);
 
   var visibleTx = useMemo(function () {
     if (!categoryFilter) return monthTx;
@@ -918,7 +1213,7 @@ function OverviewScreen(props) {
     return h(EmptyState, { onFile: props.onAddFile, error: props.error });
   }
 
-  return h('div', { className: 'screen' },
+  return h('div', { className: 'screen screen-gradient', ref: swipeRef },
     h('div', { style: { display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 } },
       data.months.map(function (m) {
         return h('button', {
@@ -934,20 +1229,44 @@ function OverviewScreen(props) {
         }, monthLabel(m));
       })
     ),
-    h('div', { style: { display: 'flex', gap: 24, marginBottom: 28, paddingBottom: 18, borderBottom: '1px solid var(--border)' } },
-      h('div', null,
-        h('div', { style: { fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: 'var(--loss)' } }, formatEUR(totalSpent)),
-        h('div', { style: { fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' } }, 'spent')
+
+    // Clean income/spending/savings summary, replacing the old two-number row.
+    h('div', { className: 'card-glass', style: { marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+        h('span', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Net this month'),
+        h('span', {
+          style: { fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 600, color: netBalance >= 0 ? 'var(--gain)' : 'var(--loss)' },
+        }, (netBalance >= 0 ? '+' : '') + formatEUR(netBalance))
       ),
-      h('div', null,
-        h('div', { style: { fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 600, color: 'var(--gain)' } }, formatEUR(totalIncome)),
-        h('div', { style: { fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)' } }, 'in')
+      h('div', { style: { height: 1, background: 'var(--border)' } }),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13 } },
+        h('span', { style: { color: 'var(--muted)' } }, 'Salary'),
+        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(salaryIncome))
+      ),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13 } },
+        h('span', { style: { color: 'var(--muted)' } }, 'Other income'),
+        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(otherIncome))
+      ),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13 } },
+        h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
+        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } }, formatEUR(totalSpent))
+      ),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13 } },
+        h('span', { style: { color: 'var(--muted)' } }, 'Invested / saved'),
+        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(invested))
       )
     ),
-    spendingByCategory.length > 0 ? h('div', { style: { marginBottom: 28 } },
+
+    // Donut + balance comparison chart side by side.
+    (spendingByCategory.length > 0 || totalIncome > 0) ? h('div', { className: 'card-glass', style: { marginBottom: 24 } },
       h('p', { className: 'section-title' }, 'Spending by category \u2014 tap a slice to filter below'),
-      h(DonutChart, { data: spendingByCategory, activeCategory: categoryFilter, onCategoryClick: setCategoryFilter })
+      h(DonutChart, { data: spendingByCategory, activeCategory: categoryFilter, onCategoryClick: setCategoryFilter }),
+      h('div', { style: { marginTop: 20 } },
+        h('p', { className: 'section-title' }, 'In vs. spent vs. invested'),
+        h(SimpleBarChart, { data: balanceChartData })
+      )
     ) : null,
+
     h('div', null,
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
         h('p', { className: 'section-title', style: { margin: 0 } },
@@ -956,7 +1275,7 @@ function OverviewScreen(props) {
       ),
       visibleTx.length === 0
         ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-        : visibleTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange }); })
+        : visibleTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory }); })
     ),
     h(ScreenFooter)
   );
@@ -1011,29 +1330,29 @@ function TrendsScreen(props) {
   }
 
   if (data.months.length < 2) {
-    return h('div', { className: 'screen' },
-      h('div', { className: 'card', style: { textAlign: 'center', padding: '40px 20px' } },
+    return h('div', { className: 'screen screen-gradient' },
+      h('div', { className: 'card-glass', style: { textAlign: 'center', padding: '40px 20px' } },
         h('p', { style: { fontSize: 14, color: 'var(--muted)' } }, 'Trends need at least two months of data. Keep uploading exports over time and this will fill in.')
       ),
       h(ScreenFooter)
     );
   }
 
-  return h('div', { className: 'screen' },
-    h('div', { style: { marginBottom: 28 } },
+  return h('div', { className: 'screen screen-gradient' },
+    h('div', { className: 'card-glass', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Spending trend'),
       h(LineChart, { series: spendingTrend })
     ),
-    h('div', { style: { marginBottom: 28 } },
+    h('div', { className: 'card-glass', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Income vs. spending'),
       h(ChartLegend, { items: [{ name: 'Income', color: 'var(--gain)' }, { name: 'Spent', color: 'var(--loss)' }] }),
       h(LineChart, { series: incomeVsExpenses })
     ),
-    h('div', { style: { marginBottom: 28 } },
+    h('div', { className: 'card-glass', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Balance over time'),
       h(LineChart, { series: balanceTrend })
     ),
-    h('div', { style: { marginBottom: 28 } },
+    h('div', { className: 'card-glass', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Category trend'),
       h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 } },
         data.allCategoriesSeen.map(function (c) {
@@ -1101,7 +1420,7 @@ function TransactionsScreen(props) {
     ),
     filtered.length === 0
       ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange }); }),
+      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory }); }),
     h(ScreenFooter)
   );
 }
@@ -1118,21 +1437,42 @@ var UNCATEGORIZED_BUCKETS = ['Other', 'Card Purchase (uncategorized)'];
 function ReviewUncategorized(props) {
   var categorized = props.categorized; // already-categorized transactions
   var onBulkAssign = props.onBulkAssign; // (fragment, category) => void
+  var categories = props.categories || ALL_CATEGORIES;
+  var onCreateCategory = props.onCreateCategory;
 
   var groups = useMemo(function () {
     var byFragment = {};
     categorized.forEach(function (tx) {
       if (UNCATEGORIZED_BUCKETS.indexOf(tx.category) === -1) return;
       var frag = merchantFragment(tx.description);
-      if (!byFragment[frag]) byFragment[frag] = { fragment: frag, count: 0, total: 0 };
+      if (!byFragment[frag]) byFragment[frag] = { fragment: frag, count: 0, total: 0, transactions: [] };
       byFragment[frag].count += 1;
       byFragment[frag].total += Math.abs(tx.amount);
+      byFragment[frag].transactions.push(tx);
+    });
+    Object.values(byFragment).forEach(function (g) {
+      g.transactions.sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
     });
     return Object.values(byFragment).sort(function (a, b) { return b.total - a.total; });
   }, [categorized]);
 
   var pickerOpenFor = useState(null);
   var openFragment = pickerOpenFor[0], setOpenFragment = pickerOpenFor[1];
+  var creatingState = useState(false);
+  var creating = creatingState[0], setCreating = creatingState[1];
+  var newNameState = useState('');
+  var newName = newNameState[0], setNewName = newNameState[1];
+
+  function handleCreateAndAssign(fragment) {
+    if (!onCreateCategory) return;
+    var created = onCreateCategory(newName);
+    if (created) {
+      onBulkAssign(fragment, created);
+      setOpenFragment(null);
+      setCreating(false);
+      setNewName('');
+    }
+  }
 
   if (groups.length === 0) {
     return h('p', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Nothing uncategorized right now \u2014 nice.');
@@ -1140,12 +1480,12 @@ function ReviewUncategorized(props) {
 
   return h('div', null,
     h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 12 } },
-      groups.length + ' uncategorized merchant' + (groups.length === 1 ? '' : 's') + ' \u2014 tap one to assign a category to every matching transaction.'),
+      groups.length + ' uncategorized merchant' + (groups.length === 1 ? '' : 's') + ' \u2014 tap one to see its transactions and assign a category.'),
     groups.map(function (g) {
       var isOpen = openFragment === g.fragment;
       return h('div', { key: g.fragment, style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
         h('div', {
-          onClick: function () { setOpenFragment(isOpen ? null : g.fragment); },
+          onClick: function () { setOpenFragment(isOpen ? null : g.fragment); setCreating(false); },
           style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
         },
           h('div', null,
@@ -1154,15 +1494,55 @@ function ReviewUncategorized(props) {
           ),
           h('span', { style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } }, formatEUR(g.total))
         ),
-        isOpen ? h('div', { style: { marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 } },
-          ALL_CATEGORIES.map(function (c) {
-            return h('button', {
-              key: c,
-              onClick: function () { onBulkAssign(g.fragment, c); setOpenFragment(null); },
-              className: 'btn-secondary',
-              style: { fontSize: 11 },
-            }, c);
-          })
+        isOpen ? h('div', { style: { marginTop: 10 } },
+          h('div', { style: { border: '1px solid var(--border)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' } },
+            g.transactions.map(function (tx, i) {
+              return h('div', {
+                key: tx.id,
+                style: {
+                  display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', fontSize: 12,
+                  borderBottom: i < g.transactions.length - 1 ? '1px solid var(--border)' : 'none',
+                },
+              },
+                h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDate(tx.dateMov)),
+                h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
+                h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
+                  (tx.amount < 0 ? '' : '+') + formatEUR(tx.amount))
+              );
+            })
+          ),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+            categories.map(function (c) {
+              return h('button', {
+                key: c,
+                onClick: function () { onBulkAssign(g.fragment, c); setOpenFragment(null); },
+                className: 'btn-secondary',
+                style: { fontSize: 11 },
+              }, c);
+            }),
+            onCreateCategory ? h('button', {
+              onClick: function () { setCreating(true); },
+              style: {
+                fontSize: 11, padding: '8px 14px', borderRadius: 8,
+                border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+              },
+            }, '+ New category') : null
+          ),
+          creating ? h('div', { style: { marginTop: 8, display: 'flex', gap: 6 } },
+            h('input', {
+              type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
+              onChange: function (e) { setNewName(e.target.value); },
+              onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndAssign(g.fragment); },
+              style: {
+                flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
+                border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+              },
+            }),
+            h('button', {
+              onClick: function () { handleCreateAndAssign(g.fragment); },
+              className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
+            }, 'Add')
+          ) : null
         ) : null
       );
     })
@@ -1174,12 +1554,13 @@ function SettingsScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides);
 
   var handleBulkAssign = useCallback(function (fragment, category) {
-    props.transactions.forEach(function (tx) {
-      if (UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description)) === -1) return;
-      if (merchantFragment(tx.description) === fragment) {
-        props.onCategoryChange(tx.id, category);
-      }
+    // The central onCategoryChange handler already tags every transaction
+    // sharing the same merchant fragment, so finding one matching transaction
+    // and calling it once is enough — no need to loop here ourselves.
+    var match = props.transactions.find(function (tx) {
+      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount)) !== -1 && merchantFragment(tx.description) === fragment;
     });
+    if (match) props.onCategoryChange(match.id, category);
   }, [props.transactions, props.onCategoryChange]);
 
   return h('div', { className: 'screen' },
@@ -1192,7 +1573,7 @@ function SettingsScreen(props) {
 
     h('p', { className: 'section-title' }, 'Categorize merchants'),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h(ReviewUncategorized, { categorized: data.categorized, onBulkAssign: handleBulkAssign })
+      h(ReviewUncategorized, { categorized: data.categorized, onBulkAssign: handleBulkAssign, categories: props.categories, onCreateCategory: props.onCreateCategory })
     ),
 
     h('p', { className: 'section-title' }, 'Backup'),
@@ -1250,6 +1631,8 @@ function App() {
   var transactions = transactionsState[0], setTransactions = transactionsState[1];
   var overridesState = useState(function () { return loadOverrides(); });
   var overrides = overridesState[0], setOverrides = overridesState[1];
+  var customCategoriesState = useState(function () { return loadCustomCategories(); });
+  var customCategories = customCategoriesState[0], setCustomCategories = customCategoriesState[1];
   var errorState = useState(null);
   var error = errorState[0], setError = errorState[1];
   var statusState = useState(null);
@@ -1266,9 +1649,24 @@ function App() {
   var updateVersion = updateVersionState[0], setUpdateVersion = updateVersionState[1];
   var pullStateState = useState('idle'); // 'idle' | 'pulling' | 'checking'
   var pullState = pullStateState[0], setPullState = pullStateState[1];
+  var showScrollTopState = useState(false);
+  var showScrollTop = showScrollTopState[0], setShowScrollTop = showScrollTopState[1];
   var mainRef = useRef(null);
 
   useEffect(function () { applyTheme(theme); }, [theme]);
+
+  // Scroll-to-top button: visible once the person has scrolled down a bit
+  // on whichever screen is currently active. Resets to hidden whenever the
+  // screen itself changes, since the new screen starts at the top anyway.
+  useEffect(function () {
+    var el = mainRef.current;
+    if (!el) return;
+    function onScroll() { setShowScrollTop(el.scrollTop > 240); }
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return function () { el.removeEventListener('scroll', onScroll); };
+  }, [screen]);
+
+  useEffect(function () { setShowScrollTop(false); }, [screen]);
 
   useEffect(function () {
     var timer = setTimeout(function () { checkForUpdate(setUpdateVersion); }, 2000);
@@ -1276,68 +1674,41 @@ function App() {
     return function () { clearTimeout(timer); clearInterval(interval); };
   }, []);
 
-  // Single gesture handler covering two behaviors that must not conflict:
-  // a vertical pull (from the very top of the scroll container) checks for
-  // updates, a horizontal swipe changes tabs. Which one fires is decided by
-  // whichever axis moved further, so a diagonal/sloppy gesture doesn't
-  // accidentally trigger both.
+  // Pull-to-refresh: only triggers when the scroll container is already at
+  // the top and the user pulls down further, so it never fights with
+  // normal scrolling.
   useEffect(function () {
     var el = mainRef.current;
     if (!el) return;
-    var startX = null, startY = null;
-    var atTopOnStart = false;
-    var pullTriggered = false;
+    var startY = null;
+    var triggered = false;
     var PULL_THRESHOLD = 70;
-    var SWIPE_THRESHOLD = 60;
 
     function onTouchStart(e) {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      atTopOnStart = el.scrollTop <= 0;
-      pullTriggered = false;
+      if (el.scrollTop <= 0) {
+        startY = e.touches[0].clientY;
+        triggered = false;
+      } else {
+        startY = null;
+      }
     }
-
     function onTouchMove(e) {
-      if (startX === null || pullTriggered) return;
-      var dx = e.touches[0].clientX - startX;
-      var dy = e.touches[0].clientY - startY;
-      // Only show the "pulling" hint once vertical movement is clearly the
-      // dominant axis, so a horizontal swipe never flashes the pull hint.
-      if (atTopOnStart && dy > 8 && Math.abs(dy) > Math.abs(dx)) {
-        setPullState('pulling');
-        if (dy > PULL_THRESHOLD) {
-          pullTriggered = true;
-          setPullState('checking');
-          checkForUpdate(function (v) {
-            setUpdateVersion(v);
-            setPullState('idle');
-          });
-          setTimeout(function () { setPullState('idle'); }, 2500);
-        }
+      if (startY === null || triggered) return;
+      var delta = e.touches[0].clientY - startY;
+      if (delta > 8) setPullState('pulling');
+      if (delta > PULL_THRESHOLD) {
+        triggered = true;
+        setPullState('checking');
+        checkForUpdate(function (v) {
+          setUpdateVersion(v);
+          setPullState('idle');
+        });
+        setTimeout(function () { setPullState('idle'); }, 2500);
       }
     }
-
-    function onTouchEnd(e) {
-      if (startX === null) return;
-      var endX = (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : startX);
-      var endY = (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : startY);
-      var dx = endX - startX;
-      var dy = endY - startY;
-
-      if (!pullTriggered && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD) {
-        var currentIdx = NAV_ITEMS.findIndex(function (n) { return n.id === screen; });
-        if (currentIdx !== -1) {
-          // Swipe left (finger moves right-to-left, dx negative) = next tab.
-          // Swipe right (dx positive) = previous tab. Clamped at the ends
-          // rather than wrapping, so it can't accidentally loop past Settings
-          // back to Overview without the person noticing.
-          var nextIdx = dx < 0 ? currentIdx + 1 : currentIdx - 1;
-          if (nextIdx >= 0 && nextIdx < NAV_ITEMS.length) setScreen(NAV_ITEMS[nextIdx].id);
-        }
-      }
-
-      if (!pullTriggered) setPullState('idle');
-      startX = null; startY = null;
+    function onTouchEnd() {
+      startY = null;
+      if (!triggered) setPullState('idle');
     }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -1348,7 +1719,7 @@ function App() {
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  }, [screen]);
+  }, []);
 
   var handleThemeChange = useCallback(function (t) {
     setTheme(t);
@@ -1379,19 +1750,69 @@ function App() {
     setStatus('Added ' + added + ' new transaction' + (added === 1 ? '' : 's') + ' (' + dup + ' already saved).');
   }, []);
 
-  var handleCategoryChange = useCallback(function (id, category) {
+  var pendingCategoryChangeState = useState(null); // { fragment, category, affected: [tx...] } | null
+  var pendingCategoryChange = pendingCategoryChangeState[0], setPendingCategoryChange = pendingCategoryChangeState[1];
+
+  function applyCategoryToFragment(fragment, category) {
     setOverrides(function (prev) {
       var next = Object.assign({}, prev);
-      next[id] = category;
+      transactions.forEach(function (t) {
+        if (merchantFragment(t.description) === fragment) next[t.id] = category;
+      });
       saveOverrides(next);
       return next;
     });
+  }
+
+  // Step 1: figure out what WOULD be affected, and only apply immediately if
+  // it's just the one transaction being looked at. Anything wider needs the
+  // person to see the list and confirm before it's actually applied.
+  var handleCategoryChange = useCallback(function (id, category) {
+    var changedTx = transactions.find(function (t) { return t.id === id; });
+    if (!changedTx) return;
+    var fragment = merchantFragment(changedTx.description);
+    var affected = transactions.filter(function (t) { return merchantFragment(t.description) === fragment; });
+
+    if (affected.length <= 1) {
+      applyCategoryToFragment(fragment, category);
+      return;
+    }
+    setPendingCategoryChange({ fragment: fragment, category: category, affected: affected });
+  }, [transactions]);
+
+  var handleConfirmCategoryChange = useCallback(function () {
+    if (!pendingCategoryChange) return;
+    applyCategoryToFragment(pendingCategoryChange.fragment, pendingCategoryChange.category);
+    setPendingCategoryChange(null);
+  }, [pendingCategoryChange]);
+
+  var handleCancelCategoryChange = useCallback(function () {
+    setPendingCategoryChange(null);
   }, []);
+
+  var allCategoriesCombined = useMemo(function () {
+    return ALL_CATEGORIES.concat(customCategories.filter(function (c) { return ALL_CATEGORIES.indexOf(c) === -1; }));
+  }, [customCategories]);
+
+  var handleCreateCategory = useCallback(function (name) {
+    var trimmed = name.trim();
+    if (!trimmed) return null;
+    // Reuse an existing category (case-sensitive match) rather than creating
+    // a near-duplicate if the person types something that already exists.
+    if (allCategoriesCombined.indexOf(trimmed) !== -1) return trimmed;
+    setCustomCategories(function (prev) {
+      var next = prev.concat([trimmed]);
+      saveCustomCategories(next);
+      return next;
+    });
+    return trimmed;
+  }, [allCategoriesCombined]);
 
   var handleBackup = useCallback(function () {
     downloadJSON('ledger-backup-' + new Date().toISOString().slice(0, 10) + '.json', {
       transactions: loadStoredTransactions(),
       overrides: loadOverrides(),
+      customCategories: loadCustomCategories(),
       exportedAt: new Date().toISOString(),
     });
   }, []);
@@ -1405,8 +1826,10 @@ function App() {
         if (!data.transactions) throw new Error('Not a valid Ledger backup file.');
         saveStoredTransactions(data.transactions);
         saveOverrides(data.overrides || {});
+        saveCustomCategories(data.customCategories || []);
         setTransactions(Object.values(data.transactions));
         setOverrides(data.overrides || {});
+        setCustomCategories(data.customCategories || []);
         setStatus('Backup restored.');
       } catch (err) {
         setError('Could not restore that file: ' + err.message);
@@ -1417,7 +1840,7 @@ function App() {
 
   var screenProps = {
     transactions: transactions, overrides: overrides, onCategoryChange: handleCategoryChange,
-    onAddFile: handleFile, status: status, error: error,
+    onAddFile: handleFile, status: status, error: error, categories: allCategoriesCombined, onCreateCategory: handleCreateCategory,
   };
 
   var screenEl;
@@ -1450,6 +1873,13 @@ function App() {
       }, pullState === 'checking' ? 'Checking for updates\u2026' : 'Release to check for updates') : null,
       screenEl
     ),
+    h('button', {
+      className: 'scroll-top-btn' + (showScrollTop ? ' visible' : ''),
+      'aria-label': 'Scroll to top',
+      onClick: function () {
+        if (mainRef.current) mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      },
+    }, '\u2191'),
     h('nav', { className: 'bottomnav' },
       NAV_ITEMS.map(function (item) {
         return h('button', {
@@ -1463,7 +1893,12 @@ function App() {
       })
     ),
     faqOpen ? h(FAQModal, { onClose: function () { setFaqOpen(false); } }) : null,
-    versionOpen ? h(VersionModal, { onClose: function () { setVersionOpen(false); } }) : null
+    versionOpen ? h(VersionModal, { onClose: function () { setVersionOpen(false); } }) : null,
+    pendingCategoryChange ? h(BulkCategoryConfirmModal, {
+      pending: pendingCategoryChange,
+      onConfirm: handleConfirmCategoryChange,
+      onCancel: handleCancelCategoryChange,
+    }) : null
   );
 }
 
