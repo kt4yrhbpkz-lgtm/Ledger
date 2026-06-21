@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #FAF7F0; font-family: 'Inter', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useCallback, useEffect } = React;
+
+// --- Parsing -----------------------------------------------------------
+
+function parseAmount(str) {
+  if (!str) return 0;
+  const cleaned = str.replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleaned);
+}
+
+function parseDateStr(str) {
+  const [d, m, y] = str.split('-').map(Number);
+  return { iso: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+}
+
+function parseCGDCsv(text) {
+  const lines = text.split(/\r?\n/);
+  const headerIdx = lines.findIndex((l) => l.startsWith('Data mov.'));
+  if (headerIdx === -1) {
+    throw new Error(
+      "Couldn't find the transaction table header (expected a line starting with 'Data mov.'). Is this a Caixadirecta export?"
+    );
+  }
+
+  const transactions = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cols = line.split(';');
+    if (cols.length < 5) continue;
+
+    const [dataMov, dataValor, descricao, montante, saldo] = cols;
+    if (!dataMov || !montante) continue;
+
+    const { iso } = parseDateStr(dataMov);
+    const desc = descricao.trim();
+    const amount = parseAmount(montante);
+    const id = `${iso}-${amount}-${desc}`.replace(/\s+/g, '_');
+
+    transactions.push({
+      id,
+      dateMov: iso,
+      description: desc,
+      amount,
+      balanceAfter: parseAmount(saldo),
+    });
+  }
+  return transactions;
+}
+
+// --- Categorization ------------------------------------------------------
+
+const RULES = [
+  { category: 'Tolls & Travel', test: (d) => /VIA VERDE/i.test(d) },
+  { category: 'Transfers (P2P)', test: (d) => /Trf Mbway/i.test(d) },
+  { category: 'Income / Transfers In', test: (d) => /^TFI /i.test(d) },
+  { category: 'Investments', test: (d) => /Trading 212/i.test(d) },
+  { category: 'Bank Fees', test: (d) => /COMISSAO|MANUT CONTA/i.test(d) },
+  { category: 'Cash Withdrawal', test: (d) => /LEVANTAMENTO|TRAN DEBITO ATM/i.test(d) },
+  { category: 'Subscriptions', test: (d) => /SPOTIFY|AMAZON PRIME|NETFLIX/i.test(d) },
+  { category: 'Shopping', test: (d) => /AMAZON|SKRILL/i.test(d) },
+  { category: 'Rideshare', test: (d) => /UBER|BOLT\.EU/i.test(d) },
+  { category: 'Fuel', test: (d) => /REPSOL|BP CANE|BP MEAL|MOEVE/i.test(d) },
+  { category: 'Pharmacy / Health', test: (d) => /FARMACIA|MEDIS/i.test(d) },
+  { category: 'Groceries', test: (d) => /CONTINE|ALDI|AUCHAN/i.test(d) },
+  { category: 'Housing', test: (d) => /CONDOMINIO/i.test(d) },
+  { category: 'Card Purchase (uncategorized)', test: (d) => /^COMPRAS C\.DEB|^COMPRA /i.test(d) },
+  { category: 'Transfer Out', test: (d) => /^TRF /i.test(d) },
+];
+
+const ALL_CATEGORIES = [...new Set(RULES.map((r) => r.category))].concat(['Other']);
+
+function autoCategory(description) {
+  for (const rule of RULES) {
+    if (rule.test(description)) return rule.category;
+  }
+  return 'Other';
+}
+
+// --- Formatting ------------------------------------------------------
+
+function formatEUR(amount) {
+  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(amount);
+}
+
+function formatDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+function monthKey(iso) {
+  return iso.slice(0, 7);
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+// --- Storage (localStorage, browser-native, this device only) -----------
+
+const TX_KEY = 'ledger:transactions';
+const OVERRIDES_KEY = 'ledger:category-overrides';
+
+function loadStoredTransactions() {
+  try {
+    const raw = localStorage.getItem(TX_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredTransactions(txMap) {
+  localStorage.setItem(TX_KEY, JSON.stringify(txMap));
+}
+
+function loadOverrides() {
+  try {
+    const raw = localStorage.getItem(OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveOverrides(overrides) {
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// --- Components ------------------------------------------------------
+
+function UploadBox({ onFile, compact }) {
+  const [dragging, setDragging] = useState(false);
+
+  const handleFiles = useCallback((files) => {
+    const file = files && files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => onFile(e.target.result);
+    reader.readAsText(file, 'utf-8');
+  }, [onFile]);
+
+  return (
+    <label
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+      style={{
+        display: 'block', width: '100%',
+        border: `2px dashed ${dragging ? '#8A4A3C' : '#E3DCC9'}`,
+        borderRadius: 8, padding: compact ? '16px' : '48px 24px',
+        textAlign: 'center', cursor: 'pointer',
+        background: dragging ? '#F1E9DF' : 'white',
+        transition: 'all 0.15s ease', boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ fontSize: compact ? 13 : 14, color: '#2B2A28', fontWeight: 500, marginBottom: 4 }}>
+        {compact ? 'Add another export' : 'Tap to choose your CSV file'}
+      </div>
+      {!compact && <div style={{ fontSize: 12, color: '#6B6558' }}>or drag and drop</div>}
+      <input
+        type="file" accept=".csv,text/csv"
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+        style={{ display: 'none' }}
+      />
+    </label>
+  );
+}
+
+function CategoryBar({ category, amount, max }) {
+  const pct = max > 0 ? (amount / max) * 100 : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #E3DCC9', fontSize: 14 }}>
+      <span style={{ flex: 1, color: '#2B2A28' }}>{category}</span>
+      <span style={{ flex: 2, height: 6, background: '#E3DCC9', borderRadius: 3, overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: '#8A4A3C' }} />
+      </span>
+      <span style={{ fontFamily: "'IBM Plex Mono', monospace", width: 90, textAlign: 'right', color: '#2B2A28' }}>
+        {formatEUR(amount)}
+      </span>
+    </div>
+  );
+}
+
+function TransactionRow({ tx, onCategoryChange }) {
+  const [editing, setEditing] = useState(false);
+  const isPositive = tx.amount > 0;
+
+  return (
+    <div style={{ borderBottom: '1px solid #E3DCC9', padding: '10px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#6B6558' }}>
+          {formatDate(tx.dateMov)}
+        </span>
+        <span
+          onClick={() => setEditing((e) => !e)}
+          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#2B2A28', cursor: 'pointer' }}
+          title={tx.description}
+        >
+          {tx.description}
+          <span style={{ display: 'block', fontSize: 10, color: tx.isOverride ? '#8A4A3C' : '#9B9586', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {tx.category}{tx.isOverride ? ' ·  edited' : ''}
+          </span>
+        </span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", textAlign: 'right', color: isPositive ? '#3D5A4A' : '#8A4A3C' }}>
+          {isPositive ? '+' : ''}{formatEUR(tx.amount)}
+        </span>
+      </div>
+
+      {editing && (
+        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {ALL_CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => { onCategoryChange(tx.id, c); setEditing(false); }}
+              style={{
+                fontSize: 11, padding: '4px 8px', borderRadius: 4,
+                border: '1px solid #E3DCC9',
+                background: c === tx.category ? '#2B2A28' : 'white',
+                color: c === tx.category ? '#FAF7F0' : '#2B2A28',
+                cursor: 'pointer',
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function downloadJSON(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function Dashboard({ transactions, overrides, onCategoryChange, onAddFile, status, onBackup, onRestore }) {
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const restoreInputRef = React.useRef(null);
+
+  const categorized = useMemo(() => transactions.map((tx) => {
+    const override = overrides[tx.id];
+    return { ...tx, category: override || autoCategory(tx.description), isOverride: Boolean(override) };
+  }), [transactions, overrides]);
+
+  const months = useMemo(() => {
+    const set = new Set(categorized.map((tx) => monthKey(tx.dateMov)));
+    return Array.from(set).sort().reverse();
+  }, [categorized]);
+
+  const activeMonth = selectedMonth || months[0];
+
+  const monthTx = useMemo(() =>
+    categorized.filter((tx) => monthKey(tx.dateMov) === activeMonth).sort((a, b) => (a.dateMov < b.dateMov ? 1 : -1)),
+    [categorized, activeMonth]
+  );
+
+  const spendingByCategory = useMemo(() => {
+    const totals = {};
+    for (const tx of monthTx) {
+      if (tx.amount < 0) totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amount);
+    }
+    return Object.entries(totals).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+  }, [monthTx]);
+
+  const totalSpent = spendingByCategory.reduce((sum, c) => sum + c.amount, 0);
+  const totalIncome = monthTx.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+  const maxCategory = spendingByCategory[0]?.amount || 1;
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#FAF7F0', fontFamily: "'Inter', -apple-system, sans-serif", color: '#2B2A28' }}>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '32px 20px 80px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid #2B2A28', paddingBottom: 14, marginBottom: 16 }}>
+          <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 24, fontWeight: 600, margin: 0 }}>Ledger</h1>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#6B6558' }}>
+            {transactions.length} transactions saved
+          </span>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <UploadBox onFile={onAddFile} compact />
+          {status && <p style={{ fontSize: 12, color: '#6B6558', marginTop: 8 }}>{status}</p>}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+          <button onClick={onBackup} style={{ flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 4, border: '1px solid #E3DCC9', background: 'white', color: '#2B2A28', cursor: 'pointer' }}>
+            Download backup
+          </button>
+          <button onClick={() => restoreInputRef.current.click()} style={{ flex: 1, fontSize: 12, padding: '8px 12px', borderRadius: 4, border: '1px solid #E3DCC9', background: 'white', color: '#2B2A28', cursor: 'pointer' }}>
+            Restore backup
+          </button>
+          <input ref={restoreInputRef} type="file" accept="application/json" style={{ display: 'none' }}
+            onChange={(e) => { onRestore(e.target.files[0]); e.target.value = ''; }} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 24, overflowX: 'auto', paddingBottom: 4 }}>
+          {months.map((m) => (
+            <button key={m} onClick={() => setSelectedMonth(m)}
+              style={{
+                flexShrink: 0, padding: '6px 12px', fontSize: 12, borderRadius: 4,
+                border: '1px solid #E3DCC9',
+                background: m === activeMonth ? '#2B2A28' : 'white',
+                color: m === activeMonth ? '#FAF7F0' : '#2B2A28',
+                cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
+              }}
+            >
+              {monthLabel(m)}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 24, marginBottom: 32, paddingBottom: 20, borderBottom: '1px solid #E3DCC9' }}>
+          <div>
+            <div style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#8A4A3C' }}>
+              {formatEUR(totalSpent)}
+            </div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' }}>spent</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 30, fontWeight: 600, color: '#3D5A4A' }}>
+              {formatEUR(totalIncome)}
+            </div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6B6558' }}>in</div>
+          </div>
+        </div>
+
+        {spendingByCategory.length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 }}>
+              Spending by category
+            </p>
+            {spendingByCategory.map((c) => <CategoryBar key={c.category} category={c.category} amount={c.amount} max={maxCategory} />)}
+          </div>
+        )}
+
+        <div>
+          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6558', marginBottom: 10 }}>
+            Transactions ({monthTx.length}) — tap one to recategorize
+          </p>
+          {monthTx.length === 0
+            ? <p style={{ color: '#6B6558', fontSize: 13 }}>No transactions this month.</p>
+            : monthTx.map((tx) => <TransactionRow key={tx.id} tx={tx} onCategoryChange={onCategoryChange} />)
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ onFile, error }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#FAF7F0', fontFamily: "'Inter', -apple-system, sans-serif", padding: 24 }}>
+      <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 32, fontWeight: 600, color: '#2B2A28', marginBottom: 8 }}>Ledger</h1>
+      <p style={{ color: '#6B6558', fontSize: 14, marginBottom: 32, textAlign: 'center', maxWidth: 320 }}>
+        Upload your Caixadirecta export to get started.
+      </p>
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <UploadBox onFile={onFile} />
+      </div>
+      {error && <p style={{ color: '#8A4A3C', fontSize: 13, marginTop: 20, maxWidth: 320, textAlign: 'center' }}>{error}</p>}
+      <p style={{ color: '#9B9586', fontSize: 11, marginTop: 32, maxWidth: 320, textAlign: 'center' }}>
+        Your data is saved in this browser on this device. Use "Download backup" regularly to avoid losing your manual category edits.
+      </p>
+    </div>
+  );
+}
+
+function App() {
+  const [transactions, setTransactions] = useState(() => Object.values(loadStoredTransactions()));
+  const [overrides, setOverrides] = useState(() => loadOverrides());
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(null);
+
+  const handleFile = useCallback((text) => {
+    setError(null);
+    let parsed;
+    try {
+      parsed = parseCGDCsv(text);
+    } catch (err) {
+      setError(err.message);
+      return;
+    }
+    if (parsed.length === 0) {
+      setError('No transactions found in this file. Make sure you uploaded the Caixadirecta export unchanged.');
+      return;
+    }
+    const existing = loadStoredTransactions();
+    const before = Object.keys(existing).length;
+    for (const tx of parsed) existing[tx.id] = tx;
+    const after = Object.keys(existing).length;
+    saveStoredTransactions(existing);
+    setTransactions(Object.values(existing));
+    setStatus(`Added ${after - before} new transaction${after - before === 1 ? '' : 's'} (${parsed.length - (after - before)} already saved).`);
+  }, []);
+
+  const handleCategoryChange = useCallback((id, category) => {
+    setOverrides((prev) => {
+      const next = { ...prev, [id]: category };
+      saveOverrides(next);
+      return next;
+    });
+  }, []);
+
+  const handleBackup = useCallback(() => {
+    downloadJSON(`ledger-backup-${new Date().toISOString().slice(0, 10)}.json`, {
+      transactions: loadStoredTransactions(),
+      overrides: loadOverrides(),
+      exportedAt: new Date().toISOString(),
+    });
+  }, []);
+
+  const handleRestore = useCallback((file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.transactions) throw new Error('Not a valid Ledger backup file.');
+        saveStoredTransactions(data.transactions);
+        saveOverrides(data.overrides || {});
+        setTransactions(Object.values(data.transactions));
+        setOverrides(data.overrides || {});
+        setStatus('Backup restored.');
+      } catch (err) {
+        setError('Could not restore that file: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }, []);
+
+  if (transactions.length === 0) {
+    return <EmptyState onFile={handleFile} error={error} />;
+  }
+
+  return (
+    <Dashboard
+      transactions={transactions}
+      overrides={overrides}
+      onCategoryChange={handleCategoryChange}
+      onAddFile={handleFile}
+      status={status}
+      onBackup={handleBackup}
+      onRestore={handleRestore}
+    />
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
