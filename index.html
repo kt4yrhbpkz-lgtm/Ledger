@@ -211,9 +211,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.10.0';
+var APP_VERSION = '1.10.1';
 
 var CHANGELOG = [
+  { version: '1.10.1', notes: [
+    'Corrigido: deslizar para mudar de mês no topo do ecrã podia ser interpretado como puxar para verificar atualizações, interrompendo o gesto',
+  ]},
   { version: '1.10.0', notes: [
     'Corrigido: a faixa de meses no Resumo estava a competir com o gesto de deslizar para mudar de mês, tornando-a difícil de deslizar manualmente',
     'Ao mudar de mês (por gesto ou ao tocar num mês), a faixa de meses agora desloca-se automaticamente para manter o mês selecionado visível e centrado',
@@ -1848,27 +1851,45 @@ function App() {
 
   // Pull-to-refresh: only triggers when the scroll container is already at
   // the top and the user pulls down further, so it never fights with
-  // normal scrolling.
+  // normal scrolling. Also requires the gesture to be clearly vertical
+  // (not just "moved down a bit") — without that check, a horizontal swipe
+  // to change months (which often starts from the very top of the screen)
+  // could pick up enough incidental vertical drift to also trigger this,
+  // making swipes feel like they were being misread as pull-to-refresh.
   useEffect(function () {
     var el = mainRef.current;
     if (!el) return;
-    var startY = null;
+    var startX = null, startY = null;
     var triggered = false;
     var PULL_THRESHOLD = 70;
+    var AXIS_LOCK_THRESHOLD = 10; // px before we decide this gesture is vertical, not horizontal
 
     function onTouchStart(e) {
       if (el.scrollTop <= 0) {
+        startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         triggered = false;
       } else {
+        startX = null;
         startY = null;
       }
     }
     function onTouchMove(e) {
       if (startY === null || triggered) return;
-      var delta = e.touches[0].clientY - startY;
-      if (delta > 8) setPullState('pulling');
-      if (delta > PULL_THRESHOLD) {
+      var dx = e.touches[0].clientX - startX;
+      var dy = e.touches[0].clientY - startY;
+      // Until the gesture has moved enough to tell, don't show any pull
+      // feedback — prevents a flash of "pulling" on what turns out to be
+      // a horizontal swipe.
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_LOCK_THRESHOLD) return;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Clearly horizontal — this isn't a pull gesture at all, stop tracking it.
+        startY = null;
+        setPullState('idle');
+        return;
+      }
+      if (dy > 8) setPullState('pulling');
+      if (dy > PULL_THRESHOLD) {
         triggered = true;
         setPullState('checking');
         checkForUpdate(function (v) {
@@ -1879,6 +1900,7 @@ function App() {
       }
     }
     function onTouchEnd() {
+      startX = null;
       startY = null;
       if (!triggered) setPullState('idle');
     }
