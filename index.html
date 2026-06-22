@@ -220,9 +220,14 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.14.0';
+var APP_VERSION = '1.14.1';
 
 var CHANGELOG = [
+  { version: '1.14.1', notes: [
+    'Cada categoria mantém agora sempre a mesma cor no gráfico circular e nos gráficos de linha, independentemente do mês ou da ordem em que aparece',
+    'Paleta de cores ampliada, para reduzir a probabilidade de duas categorias diferentes partilharem a mesma cor',
+    'O filtro de categoria em "Category trend" mostra agora todas as categorias visíveis de uma vez (organizadas em várias linhas), em vez de precisar de deslizar para os lados',
+  ]},
   { version: '1.14.0', notes: [
     'Corrigido: arrastar o dedo sobre os gráficos para ver os valores estava a selecionar texto por baixo',
     '"Monthly net" e "Balance over time" mostram agora vermelho quando o valor é negativo, com uma linha de referência no zero quando os dados cruzam essa fronteira',
@@ -846,7 +851,28 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 }
 
-var CHART_COLORS = ['#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85751', '#7A8B5C', '#9B6B9E', '#5C8A8A', '#B08968', '#6B7A8F', '#8F6B6B'];
+var CHART_COLORS = [
+  '#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85751',
+  '#7A8B5C', '#9B6B9E', '#5C8A8A', '#B08968', '#6B7A8F', '#8F6B6B',
+  '#D98E73', '#4F7A6E', '#9C7AB8', '#E0BC8C', '#7AA3C2', '#C77B6E',
+  '#9AB37E', '#B98FC0', '#7BAFAF', '#D4A985', '#8C9BB5', '#B58F8F',
+];
+
+// Maps a category name to a color deterministically, so e.g. "Groceries" is
+// always the same color in every chart and every month — rather than being
+// colored by its position in that particular month's sorted list, which
+// changes from month to month as spending amounts shift around.
+var categoryColorCache = {};
+function colorForCategory(category) {
+  if (categoryColorCache[category]) return categoryColorCache[category];
+  var hash = 0;
+  for (var i = 0; i < category.length; i++) {
+    hash = (hash * 31 + category.charCodeAt(i)) >>> 0;
+  }
+  var color = CHART_COLORS[hash % CHART_COLORS.length];
+  categoryColorCache[category] = color;
+  return color;
+}
 
 function LineChart(props) {
   var series = props.series; // [{ name, color, values: [{x: label, y: number}] }]
@@ -1316,7 +1342,7 @@ function DonutChart(props) {
     angle += sweep;
     return {
       path: arcPath(startAngle, endAngle, radius, innerRadius),
-      color: CHART_COLORS[i % CHART_COLORS.length],
+      color: colorForCategory(d.category),
       category: d.category,
       amount: d.amount,
     };
@@ -1887,7 +1913,7 @@ function TrendsScreen(props) {
   var categoryTrend = useMemo(function () {
     if (!activeTrendCategory) return [];
     return [{
-      name: activeTrendCategory, color: 'var(--loss)',
+      name: activeTrendCategory, color: colorForCategory(activeTrendCategory),
       values: data.monthsAscending.map(function (mk) {
         var sum = 0;
         data.categorized.forEach(function (tx) {
@@ -1931,14 +1957,14 @@ function TrendsScreen(props) {
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Category trend'),
-      h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 } },
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 } },
         data.allCategoriesSeen.map(function (c) {
           return h('button', {
             key: c,
             onClick: function () { setTrendCategory(c); },
             className: 'btn-secondary',
             style: {
-              flexShrink: 0, fontSize: 11,
+              fontSize: 11,
               background: c === activeTrendCategory ? 'var(--text)' : 'var(--surface)',
               color: c === activeTrendCategory ? 'var(--bg)' : 'var(--text)',
               borderColor: c === activeTrendCategory ? 'var(--text)' : 'var(--border)',
