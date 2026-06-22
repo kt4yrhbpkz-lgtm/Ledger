@@ -220,9 +220,19 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.16.1';
+var APP_VERSION = '1.17.0';
 
 var CHANGELOG = [
+  { version: '1.17.0', notes: [
+    'Os gr\u00e1ficos de Tend\u00eancias mostram agora o ano junto ao m\u00eas (ex: "Jun \'26")',
+    'Novo: pinch-to-zoom nos gr\u00e1ficos \u2014 afasta dois dedos para aumentar o per\u00edodo vis\u00edvel (e o eixo Y ajusta-se automaticamente), aproxima para diminuir, e arrasta com um dedo para navegar enquanto ampliado',
+    'Tend\u00eancias reorganizado: Monthly net (em barras por defeito), Income vs. spending (com filtro Both/Income/Spent), Balance over time, Category trend',
+    '"Category trend" passa a incluir Sal\u00e1rio e Investimentos como op\u00e7\u00f5es de filtro, al\u00e9m das categorias de despesa',
+    'Nova sele\u00e7\u00e3o m\u00faltipla em Transactions (botão "Select") para categorizar v\u00e1rias transações de uma vez, mesmo de comerciantes diferentes',
+    'Nova sele\u00e7\u00e3o m\u00faltipla em "Categorize merchants" (bot\u00e3o "Select multiple") para categorizar v\u00e1rios comerciantes de uma s\u00f3 vez',
+    'Nova pesquisa de texto em Transactions (descri\u00e7\u00e3o, categoria ou nota)',
+    'Novo filtro de m\u00eas/ano com sele\u00e7\u00e3o m\u00faltipla em Transactions, e bot\u00e3o "Clear all filters" para limpar pesquisa, m\u00eas e categoria de uma vez',
+  ]},
   { version: '1.16.1', notes: [
     'Corrigido um bug real de dados: importar um ficheiro com transações que já tinhas a partir de antes de uma atualização anterior podia duplicá-las, porque o identificador interno de cada transação mudou de formato numa versão passada. A app agora também verifica pela data, valor e descrição, não só pelo identificador, para reconhecer corretamente transações já guardadas mesmo que tenham sido importadas com uma versão mais antiga da app.',
   ]},
@@ -382,6 +392,12 @@ var FAQ_ITEMS = [
     a: 'Sim. Toca na transação, depois em "\ud83d\udcc5 Move to month" e escolhe o mês em que queres que ela seja contabilizada. Isto não altera a data real do banco \u2014 continua a mostrar quando a transação aconteceu de verdade \u2014 só muda em que mês ela conta para os totais, gráficos e filtros. O gráfico "Balance over time" continua a usar sempre a data real, já que reflete o saldo bancário tal como aconteceu.' },
   { q: 'Reimportei um ficheiro com transações sobrepostas e apareceram duplicadas. Porquê?',
     a: 'Isto era um bug real, já corrigido. O identificador interno de cada transação mudou de formato numa versão anterior da app (para resolver outro problema, de transações genuinamente diferentes no mesmo dia a colidirem). Transações guardadas antes dessa mudança ficaram com um identificador num formato antigo, que deixou de coincidir com o identificador gerado ao reimportar o mesmo ficheiro depois da atualização \u2014 por isso eram tratadas como novas em vez de já existentes. A partir desta versão, a app também verifica pela data, valor e descrição da transação, não só pelo identificador, por isso volta a reconhecer corretamente transações já guardadas mesmo que tenham um identificador de uma versão mais antiga. Se já tiveres duplicados de antes desta correção, terás de os remover manualmente \u2014 a app não os apaga automaticamente, para nunca arriscar apagar algo por engano.' },
+  { q: 'Como funciona o zoom nos gr\u00e1ficos de Tend\u00eancias?',
+    a: 'Afasta dois dedos sobre o gr\u00e1fico para ampliar o per\u00edodo vis\u00edvel \u2014 o eixo vertical ajusta-se automaticamente aos valores desse per\u00edodo. Aproxima os dedos para diminuir o zoom. Enquanto ampliado, arrasta com um dedo para navegar para a esquerda ou direita. Aparece um bot\u00e3o "Reset zoom" para voltar \u00e0 vista completa.' },
+  { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
+    a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
+  { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
+    a: 'Em Transactions, usa a caixa de pesquisa para procurar por descri\u00e7\u00e3o, categoria ou nota. Usa o filtro "\ud83d\udcc5" para escolher um ou v\u00e1rios meses \u2014 podes combinar com a pesquisa e com o filtro de categoria. O bot\u00e3o "Clear all filters" limpa tudo de uma vez.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -990,8 +1006,46 @@ function LineChart(props) {
     instanceIdRef.current = Math.round(Math.random() * 1e6);
   }
 
+  var fullLength = series[0] ? series[0].values.length : 0;
+
+  // --- Pinch-to-zoom + pan -----------------------------------------------
+  // viewWindow is the [startIdx, endIdx] slice (inclusive) of the full data
+  // currently shown — pinching narrows/widens it (zoom), a single-finger
+  // drag while already zoomed pans it sideways. Both axes recompute from
+  // only the points inside this window, so zooming in also rescales the
+  // y-axis to fit just the visible range rather than staying fixed to the
+  // full series' min/max.
+  var viewWindowState = useState(null); // null = full range, else [startIdx, endIdx]
+  var viewWindow = viewWindowState[0], setViewWindow = viewWindowState[1];
+  var startIdx = viewWindow ? viewWindow[0] : 0;
+  var endIdx = viewWindow ? viewWindow[1] : Math.max(0, fullLength - 1);
+  var isZoomed = viewWindow !== null;
+
+  var pinchRef = useRef(null); // { startDist, startWindow } while a 2-finger gesture is active
+  var panRef = useRef(null); // { startX, startWindow } while a 1-finger pan is active (only when zoomed)
+
+  function clampWindow(s, e) {
+    s = Math.max(0, Math.round(s));
+    e = Math.min(fullLength - 1, Math.round(e));
+    if (e - s < 1) { // never zoom in past 2 visible points — a single point can't show a trend
+      if (s === 0) e = Math.min(fullLength - 1, 1);
+      else s = Math.max(0, e - 1);
+    }
+    return [s, e];
+  }
+
+  function resetZoom() {
+    setViewWindow(null);
+  }
+
+  var visibleSeries = useMemo(function () {
+    return series.map(function (s) {
+      return Object.assign({}, s, { values: s.values.slice(startIdx, endIdx + 1) });
+    });
+  }, [series, startIdx, endIdx]);
+
   var allValues = [];
-  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  visibleSeries.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
   var maxVal = Math.max.apply(null, allValues.concat([0]));
   var minVal = Math.min.apply(null, allValues.concat([0]));
   if (maxVal === minVal) maxVal = minVal + 1;
@@ -999,7 +1053,7 @@ function LineChart(props) {
   // gradient fill) never gets visually clipped against the top edge.
   maxVal += (maxVal - minVal) * 0.08;
 
-  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
+  var labels = visibleSeries[0] ? visibleSeries[0].values.map(function (v) { return v.x; }) : [];
   var innerW = width - padding.left - padding.right;
   var innerH = height - padding.top - padding.bottom;
 
@@ -1041,7 +1095,7 @@ function LineChart(props) {
   var showZeroLine = colorBySign && minVal < 0 && maxVal > 0;
   var zeroY = showZeroLine ? yPos(0) : null;
 
-  var seriesData = series.map(function (s, si) {
+  var seriesData = visibleSeries.map(function (s, si) {
     var color = s.color || CHART_COLORS[si % CHART_COLORS.length];
     var points = s.values.map(function (v, i) { return { x: xPos(i), y: yPos(v.y), value: v.y }; });
     var linePath = smoothPath(points);
@@ -1065,7 +1119,7 @@ function LineChart(props) {
     };
   });
 
-  // --- Touch/drag crosshair --------------------------------------------
+  // --- Touch/drag crosshair, pinch-zoom, and pan --------------------------
   var activeIdxState = useState(null);
   var activeIdx = activeIdxState[0], setActiveIdx = activeIdxState[1];
   var containerRef = useRef(null);
@@ -1084,12 +1138,64 @@ function LineChart(props) {
     return closest;
   }
 
-  function handleTouchMove(e) {
-    var idx = nearestIndexForClientX(e.touches[0].clientX);
-    if (idx !== null) setActiveIdx(idx);
+  function touchDistance(touches) {
+    var dx = touches[0].clientX - touches[1].clientX;
+    var dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   }
-  function handleTouchEnd() {
-    setActiveIdx(null);
+
+  function handleTouchStart(e) {
+    if (e.touches.length === 2) {
+      pinchRef.current = { startDist: touchDistance(e.touches), startWindow: [startIdx, endIdx] };
+      panRef.current = null;
+      setActiveIdx(null);
+    } else if (e.touches.length === 1) {
+      if (isZoomed) {
+        panRef.current = { startX: e.touches[0].clientX, startWindow: [startIdx, endIdx] };
+      }
+      var idx = nearestIndexForClientX(e.touches[0].clientX);
+      if (idx !== null) setActiveIdx(idx);
+    }
+  }
+
+  function handleTouchMove(e) {
+    if (e.touches.length === 2 && pinchRef.current) {
+      var dist = touchDistance(e.touches);
+      var ratio = pinchRef.current.startDist / Math.max(dist, 1); // pinch out (dist grows) -> ratio < 1 -> zoom in
+      var sw = pinchRef.current.startWindow;
+      var span = sw[1] - sw[0];
+      var center = (sw[0] + sw[1]) / 2;
+      var newSpan = Math.max(1, Math.min(fullLength - 1, span * ratio));
+      var clamped = clampWindow(center - newSpan / 2, center + newSpan / 2);
+      setViewWindow(clamped);
+      return;
+    }
+    if (e.touches.length === 1 && panRef.current) {
+      var el = containerRef.current;
+      if (!el) return;
+      var rect = el.getBoundingClientRect();
+      if (rect.width === 0) return;
+      var dxPx = e.touches[0].clientX - panRef.current.startX;
+      var dxSvg = (dxPx / rect.width) * width;
+      var dxIdx = -(dxSvg / innerW) * (panRef.current.startWindow[1] - panRef.current.startWindow[0] || 1);
+      var sw2 = panRef.current.startWindow;
+      setViewWindow(clampWindow(sw2[0] + dxIdx, sw2[1] + dxIdx));
+      return;
+    }
+    if (e.touches.length === 1) {
+      var idx2 = nearestIndexForClientX(e.touches[0].clientX);
+      if (idx2 !== null) setActiveIdx(idx2);
+    }
+  }
+
+  function handleTouchEnd(e) {
+    if (e.touches.length === 0) {
+      pinchRef.current = null;
+      panRef.current = null;
+      setActiveIdx(null);
+    } else if (e.touches.length === 1) {
+      pinchRef.current = null;
+    }
   }
 
   var tooltipLeftPct = activeIdx !== null ? (xPos(activeIdx) / width) * 100 : 0;
@@ -1097,16 +1203,24 @@ function LineChart(props) {
   // edge, so it never gets clipped by the container.
   var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
 
-  return h('div', {
-    ref: containerRef,
-    style: {
-      position: 'relative', touchAction: 'pan-y',
-      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+  return h('div', { style: { position: 'relative' } },
+    isZoomed ? h('button', {
+      onClick: resetZoom,
+      style: {
+        position: 'absolute', top: -4, right: 0, zIndex: 3, fontSize: 10, padding: '4px 10px',
+        borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--muted)', cursor: 'pointer',
+      },
+    }, '\u21ba Reset zoom') : null,
+    h('div', {
+      ref: containerRef,
+      style: {
+        position: 'relative', touchAction: isZoomed ? 'none' : 'pan-y',
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+      },
+      onTouchStart: handleTouchStart,
+      onTouchMove: handleTouchMove,
+      onTouchEnd: handleTouchEnd,
     },
-    onTouchStart: handleTouchMove,
-    onTouchMove: handleTouchMove,
-    onTouchEnd: handleTouchEnd,
-  },
     activeIdx !== null ? h('div', {
       style: {
         position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
@@ -1120,7 +1234,7 @@ function LineChart(props) {
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
       seriesData.map(function (sd, si) {
-        var val = series[si].values[activeIdx].y;
+        var val = visibleSeries[si].values[activeIdx].y;
         var dotColor = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: dotColor, display: 'inline-block', flexShrink: 0 } }),
@@ -1180,6 +1294,7 @@ function LineChart(props) {
         }, label);
       })
     )
+    )
   );
 }
 
@@ -1195,18 +1310,54 @@ function TimeSeriesBarChart(props) {
   var width = 440;
   var padding = { top: 16, right: 8, bottom: 24, left: 44 };
 
+  var fullLength = series[0] ? series[0].values.length : 0;
+
+  // Same pinch-to-zoom / pan-when-zoomed model as LineChart — see the
+  // comment there for the full rationale. Kept duplicated rather than
+  // shared since the two charts differ enough in their rendering (bars vs.
+  // a smoothed path) that a shared hook would need almost as many
+  // chart-specific branches as just having two copies.
+  var viewWindowState = useState(null);
+  var viewWindow = viewWindowState[0], setViewWindow = viewWindowState[1];
+  var startIdx = viewWindow ? viewWindow[0] : 0;
+  var endIdx = viewWindow ? viewWindow[1] : Math.max(0, fullLength - 1);
+  var isZoomed = viewWindow !== null;
+
+  var pinchRef = useRef(null);
+  var panRef = useRef(null);
+
+  function clampWindow(s, e) {
+    s = Math.max(0, Math.round(s));
+    e = Math.min(fullLength - 1, Math.round(e));
+    if (e - s < 1) {
+      if (s === 0) e = Math.min(fullLength - 1, 1);
+      else s = Math.max(0, e - 1);
+    }
+    return [s, e];
+  }
+
+  function resetZoom() {
+    setViewWindow(null);
+  }
+
+  var visibleSeries = useMemo(function () {
+    return series.map(function (s) {
+      return Object.assign({}, s, { values: s.values.slice(startIdx, endIdx + 1) });
+    });
+  }, [series, startIdx, endIdx]);
+
   var allValues = [];
-  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  visibleSeries.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
   var maxVal = Math.max.apply(null, allValues.concat([0]));
   var minVal = Math.min.apply(null, allValues.concat([0]));
   if (maxVal === minVal) maxVal = minVal + 1;
   maxVal += (maxVal - minVal) * 0.08;
   if (minVal < 0) minVal -= (maxVal - minVal) * 0.08;
 
-  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
+  var labels = visibleSeries[0] ? visibleSeries[0].values.map(function (v) { return v.x; }) : [];
   var innerW = width - padding.left - padding.right;
   var innerH = height - padding.top - padding.bottom;
-  var seriesCount = series.length;
+  var seriesCount = visibleSeries.length;
   var slotW = labels.length > 0 ? innerW / labels.length : innerW;
   var barW = Math.max(3, (slotW * 0.6) / seriesCount);
 
@@ -1243,27 +1394,87 @@ function TimeSeriesBarChart(props) {
     return closest;
   }
 
-  function handleTouchMove(e) {
-    var idx = nearestIndexForClientX(e.touches[0].clientX);
-    if (idx !== null) setActiveIdx(idx);
+  function touchDistance(touches) {
+    var dx = touches[0].clientX - touches[1].clientX;
+    var dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   }
-  function handleTouchEnd() {
-    setActiveIdx(null);
+
+  function handleTouchStart(e) {
+    if (e.touches.length === 2) {
+      pinchRef.current = { startDist: touchDistance(e.touches), startWindow: [startIdx, endIdx] };
+      panRef.current = null;
+      setActiveIdx(null);
+    } else if (e.touches.length === 1) {
+      if (isZoomed) {
+        panRef.current = { startX: e.touches[0].clientX, startWindow: [startIdx, endIdx] };
+      }
+      var idx = nearestIndexForClientX(e.touches[0].clientX);
+      if (idx !== null) setActiveIdx(idx);
+    }
+  }
+
+  function handleTouchMove(e) {
+    if (e.touches.length === 2 && pinchRef.current) {
+      var dist = touchDistance(e.touches);
+      var ratio = pinchRef.current.startDist / Math.max(dist, 1);
+      var sw = pinchRef.current.startWindow;
+      var span = sw[1] - sw[0];
+      var center = (sw[0] + sw[1]) / 2;
+      var newSpan = Math.max(1, Math.min(fullLength - 1, span * ratio));
+      var clamped = clampWindow(center - newSpan / 2, center + newSpan / 2);
+      setViewWindow(clamped);
+      return;
+    }
+    if (e.touches.length === 1 && panRef.current) {
+      var el = containerRef.current;
+      if (!el) return;
+      var rect = el.getBoundingClientRect();
+      if (rect.width === 0) return;
+      var dxPx = e.touches[0].clientX - panRef.current.startX;
+      var dxSvg = (dxPx / rect.width) * width;
+      var dxIdx = -(dxSvg / innerW) * (panRef.current.startWindow[1] - panRef.current.startWindow[0] || 1);
+      var sw2 = panRef.current.startWindow;
+      setViewWindow(clampWindow(sw2[0] + dxIdx, sw2[1] + dxIdx));
+      return;
+    }
+    if (e.touches.length === 1) {
+      var idx2 = nearestIndexForClientX(e.touches[0].clientX);
+      if (idx2 !== null) setActiveIdx(idx2);
+    }
+  }
+
+  function handleTouchEnd(e) {
+    if (e.touches.length === 0) {
+      pinchRef.current = null;
+      panRef.current = null;
+      setActiveIdx(null);
+    } else if (e.touches.length === 1) {
+      pinchRef.current = null;
+    }
   }
 
   var tooltipLeftPct = activeIdx !== null ? (slotCenterX(activeIdx) / width) * 100 : 0;
   var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
 
-  return h('div', {
-    ref: containerRef,
-    style: {
-      position: 'relative', touchAction: 'pan-y',
-      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+  return h('div', { style: { position: 'relative' } },
+    isZoomed ? h('button', {
+      onClick: resetZoom,
+      style: {
+        position: 'absolute', top: -4, right: 0, zIndex: 3, fontSize: 10, padding: '4px 10px',
+        borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--muted)', cursor: 'pointer',
+      },
+    }, '\u21ba Reset zoom') : null,
+    h('div', {
+      ref: containerRef,
+      style: {
+        position: 'relative', touchAction: isZoomed ? 'none' : 'pan-y',
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+      },
+      onTouchStart: handleTouchStart,
+      onTouchMove: handleTouchMove,
+      onTouchEnd: handleTouchEnd,
     },
-    onTouchStart: handleTouchMove,
-    onTouchMove: handleTouchMove,
-    onTouchEnd: handleTouchEnd,
-  },
     activeIdx !== null ? h('div', {
       style: {
         position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
@@ -1276,7 +1487,7 @@ function TimeSeriesBarChart(props) {
       },
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
-      series.map(function (s, si) {
+      visibleSeries.map(function (s, si) {
         var val = s.values[activeIdx].y;
         var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
@@ -1293,7 +1504,7 @@ function TimeSeriesBarChart(props) {
         );
       }),
       labels.map(function (label, i) {
-        return series.map(function (s, si) {
+        return visibleSeries.map(function (s, si) {
           var val = s.values[i].y;
           var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
           var barX = slotCenterX(i) - (barW * seriesCount) / 2 + barW * si;
@@ -1323,6 +1534,7 @@ function TimeSeriesBarChart(props) {
           textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
         }, label);
       })
+    )
     )
   );
 }
@@ -1357,7 +1569,7 @@ function SimpleBarChart(props) {
 // its own choice independently of any other chart on the same screen,
 // since charts aren't meant to all switch together.
 function ToggleableChart(props) {
-  var chartTypeState = useState('line');
+  var chartTypeState = useState(props.defaultType || 'line');
   var chartType = chartTypeState[0], setChartType = chartTypeState[1];
 
   return h('div', null,
@@ -1704,18 +1916,32 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides) {
     return Object.keys(set).sort();
   }, [categorized]);
 
+  // Broader than allCategoriesSeen above (which only covers spending
+  // categories) — this also includes Salary and Investments, so the
+  // category-trend chart in Trends can show those alongside regular
+  // spending categories when the person wants to track them over time too.
+  var allCategoriesSeenBroad = useMemo(function () {
+    var set = {};
+    categorized.forEach(function (tx) { set[tx.category] = true; });
+    return Object.keys(set).sort();
+  }, [categorized]);
+
   return {
     categorized: categorized,
     months: months,
     monthsAscending: monthsAscending,
     monthlyTotals: monthlyTotals,
     allCategoriesSeen: allCategoriesSeen,
+    allCategoriesSeenBroad: allCategoriesSeenBroad,
   };
 }
 
 function shortMonthLabel(key) {
   var parts = key.split('-').map(Number);
-  return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
+  var d = new Date(parts[0], parts[1] - 1, 1);
+  var month = d.toLocaleDateString('en-GB', { month: 'short' });
+  var yy = String(parts[0]).slice(2);
+  return month + " '" + yy;
 }
 
 // --- Overview screen ------------------------------------------------------
@@ -2006,20 +2232,16 @@ function TrendsScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
-
-  var spendingTrend = useMemo(function () {
-    return [{
-      name: 'Spent', color: 'var(--loss)',
-      values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }),
-    }];
-  }, [data.monthsAscending, data.monthlyTotals]);
+  var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
+  var incomeVsSpendFilter = incomeVsSpendFilterState[0], setIncomeVsSpendFilter = incomeVsSpendFilterState[1];
 
   var incomeVsExpenses = useMemo(function () {
-    return [
-      { name: 'Income', color: 'var(--gain)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].income : 0 }; }) },
-      { name: 'Spent', color: 'var(--loss)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }) },
-    ];
-  }, [data.monthsAscending, data.monthlyTotals]);
+    var incomeSeries = { name: 'Income', color: 'var(--gain)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].income : 0 }; }) };
+    var spentSeries = { name: 'Spent', color: 'var(--loss)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }) };
+    if (incomeVsSpendFilter === 'income') return [incomeSeries];
+    if (incomeVsSpendFilter === 'spent') return [spentSeries];
+    return [incomeSeries, spentSeries];
+  }, [data.monthsAscending, data.monthlyTotals, incomeVsSpendFilter]);
 
   var balanceTrend = useMemo(function () {
     return [{
@@ -2042,16 +2264,23 @@ function TrendsScreen(props) {
     }];
   }, [data.monthsAscending, data.monthlyTotals]);
 
-  var activeTrendCategory = trendCategory || data.allCategoriesSeen[0];
+  var activeTrendCategory = trendCategory || data.allCategoriesSeenBroad[0];
 
   var categoryTrend = useMemo(function () {
     if (!activeTrendCategory) return [];
+    // Salary and Investments aren't "spending" categories, so they're
+    // summed by their actual magnitude rather than filtered through
+    // isSpending() — a salary total should reflect every matching
+    // transaction that month, not be zeroed out because it's a credit.
+    var isSpecialCategory = activeTrendCategory === 'Salary' || activeTrendCategory === 'Investments';
     return [{
       name: activeTrendCategory, color: colorForCategory(activeTrendCategory),
       values: data.monthsAscending.map(function (mk) {
         var sum = 0;
         data.categorized.forEach(function (tx) {
-          if (tx.effectiveMonthKey === mk && tx.category === activeTrendCategory && isSpending(tx)) sum += Math.abs(tx.amount);
+          if (tx.effectiveMonthKey !== mk || tx.category !== activeTrendCategory) return;
+          if (isSpecialCategory) sum += Math.abs(tx.amount);
+          else if (isSpending(tx)) sum += Math.abs(tx.amount);
         });
         return { x: shortMonthLabel(mk), y: sum };
       }),
@@ -2073,12 +2302,27 @@ function TrendsScreen(props) {
 
   return h('div', { className: 'screen' },
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Spending trend'),
-      h(ToggleableChart, { series: spendingTrend })
+      h('p', { className: 'section-title' }, 'Monthly net (income \u2212 spending)'),
+      h(ToggleableChart, { series: monthlyNetTrend, colorBySign: { positive: 'var(--gain)', negative: 'var(--loss)' }, defaultType: 'bar' })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Income vs. spending'),
-      h(ChartLegend, { items: [{ name: 'Income', color: 'var(--gain)' }, { name: 'Spent', color: 'var(--loss)' }] }),
+      h('div', { style: { display: 'flex', gap: 6, marginBottom: 12 } },
+        [['both', 'Both'], ['income', 'Income'], ['spent', 'Spent']].map(function (opt) {
+          return h('button', {
+            key: opt[0],
+            onClick: function () { setIncomeVsSpendFilter(opt[0]); },
+            className: 'btn-secondary',
+            style: {
+              fontSize: 11,
+              background: incomeVsSpendFilter === opt[0] ? 'var(--text)' : 'var(--surface)',
+              color: incomeVsSpendFilter === opt[0] ? 'var(--bg)' : 'var(--text)',
+              borderColor: incomeVsSpendFilter === opt[0] ? 'var(--text)' : 'var(--border)',
+            },
+          }, opt[1]);
+        })
+      ),
+      incomeVsSpendFilter === 'both' ? h(ChartLegend, { items: [{ name: 'Income', color: 'var(--gain)' }, { name: 'Spent', color: 'var(--loss)' }] }) : null,
       h(ToggleableChart, { series: incomeVsExpenses })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
@@ -2086,13 +2330,9 @@ function TrendsScreen(props) {
       h(ToggleableChart, { series: balanceTrend, colorBySign: { positive: 'var(--accent2)', negative: 'var(--loss)' } })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Monthly net (income \u2212 spending)'),
-      h(ToggleableChart, { series: monthlyNetTrend, colorBySign: { positive: 'var(--gain)', negative: 'var(--loss)' } })
-    ),
-    h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Category trend'),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 } },
-        data.allCategoriesSeen.map(function (c) {
+        data.allCategoriesSeenBroad.map(function (c) {
           return h('button', {
             key: c,
             onClick: function () { setTrendCategory(c); },
@@ -2118,18 +2358,76 @@ function TransactionsScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var filterCategoryState = useState(null);
   var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
+  var searchTextState = useState('');
+  var searchText = searchTextState[0], setSearchText = searchTextState[1];
+  var monthFilterState = useState([]); // [] = all months; otherwise a set of selected month keys
+  var monthFilter = monthFilterState[0], setMonthFilter = monthFilterState[1];
+  var monthPickerOpenState = useState(false);
+  var monthPickerOpen = monthPickerOpenState[0], setMonthPickerOpen = monthPickerOpenState[1];
+  var selectModeState = useState(false);
+  var selectMode = selectModeState[0], setSelectMode = selectModeState[1];
+  var selectedIdsState = useState({}); // { [id]: true }
+  var selectedIds = selectedIdsState[0], setSelectedIds = selectedIdsState[1];
+  var bulkCategorizeOpenState = useState(false);
+  var bulkCategorizeOpen = bulkCategorizeOpenState[0], setBulkCategorizeOpen = bulkCategorizeOpenState[1];
 
   var filtered = useMemo(function () {
+    var q = searchText.trim().toLowerCase();
     return data.categorized
-      .filter(function (tx) { return !filterCategory || tx.category === filterCategory; })
+      .filter(function (tx) {
+        if (filterCategory && tx.category !== filterCategory) return false;
+        if (monthFilter.length > 0 && monthFilter.indexOf(tx.effectiveMonthKey) === -1) return false;
+        if (q) {
+          var haystack = (tx.description + ' ' + tx.category + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
+          if (haystack.indexOf(q) === -1) return false;
+        }
+        return true;
+      })
       .sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
-  }, [data.categorized, filterCategory]);
+  }, [data.categorized, filterCategory, monthFilter, searchText, props.notes]);
 
   var allCategories = useMemo(function () {
     var set = {};
     data.categorized.forEach(function (tx) { set[tx.category] = true; });
     return Object.keys(set).sort();
   }, [data.categorized]);
+
+  var hasAnyFilter = Boolean(filterCategory) || monthFilter.length > 0 || searchText.trim().length > 0;
+
+  function clearAllFilters() {
+    setFilterCategory(null);
+    setMonthFilter([]);
+    setSearchText('');
+  }
+
+  function toggleMonthInFilter(mk) {
+    setMonthFilter(function (prev) {
+      return prev.indexOf(mk) === -1 ? prev.concat([mk]) : prev.filter(function (m) { return m !== mk; });
+    });
+  }
+
+  function toggleSelectMode() {
+    setSelectMode(function (prev) { return !prev; });
+    setSelectedIds({});
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds(function (prev) {
+      var next = Object.assign({}, prev);
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
+  }
+
+  var selectedCount = Object.keys(selectedIds).length;
+
+  function handleBulkCategorize(category) {
+    if (props.onApplyCategoryToSelection) props.onApplyCategoryToSelection(Object.keys(selectedIds), category);
+    setBulkCategorizeOpen(false);
+    setSelectMode(false);
+    setSelectedIds({});
+  }
 
   if (props.transactions.length === 0) {
     return h(EmptyState, { onFile: props.onAddFile, error: props.error });
@@ -2138,8 +2436,31 @@ function TransactionsScreen(props) {
   return h('div', { className: 'screen' },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
       h('p', { className: 'section-title', style: { margin: 0 } }, filtered.length + ' transactions'),
-      filterCategory ? h('button', { className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setFilterCategory(null); } }, 'Clear filter') : null
+      h('button', {
+        className: 'btn-secondary', style: { fontSize: 11 }, onClick: toggleSelectMode,
+      }, selectMode ? 'Cancel' : 'Select')
     ),
+
+    h('div', { style: { marginBottom: 12 } },
+      h('input', {
+        type: 'text', value: searchText, placeholder: 'Search description, category, or note\u2026',
+        onChange: function (e) { setSearchText(e.target.value); },
+        style: {
+          width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 10,
+          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+        },
+      })
+    ),
+
+    h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' } },
+      h('button', {
+        className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setMonthPickerOpen(true); },
+      }, monthFilter.length === 0 ? '\ud83d\udcc5 All months' : '\ud83d\udcc5 ' + monthFilter.length + ' month' + (monthFilter.length === 1 ? '' : 's')),
+      hasAnyFilter ? h('button', {
+        className: 'btn-secondary', style: { fontSize: 11, color: 'var(--loss)' }, onClick: clearAllFilters,
+      }, '\u2715 Clear all filters') : null
+    ),
+
     h('div', { style: { display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 } },
       allCategories.map(function (c) {
         return h('button', {
@@ -2155,10 +2476,98 @@ function TransactionsScreen(props) {
         }, c);
       })
     ),
+
     filtered.length === 0
       ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote, onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months }); }),
-    h(ScreenFooter)
+      : filtered.map(function (tx) {
+          if (selectMode) {
+            return h('div', {
+              key: tx.id, onClick: function () { toggleSelected(tx.id); },
+              style: { display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', padding: '10px 0', cursor: 'pointer' },
+            },
+              h('div', {
+                style: {
+                  width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                  border: '2px solid ' + (selectedIds[tx.id] ? 'var(--accent)' : 'var(--border)'),
+                  background: selectedIds[tx.id] ? 'var(--accent)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                },
+              }, selectedIds[tx.id] ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+              h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '50px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
+                h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
+                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' } }, tx.description),
+                h('span', { style: { fontFamily: 'var(--mono)', textAlign: 'right', color: tx.amount > 0 ? 'var(--gain)' : 'var(--loss)' } },
+                  (tx.amount > 0 ? '+' : '') + formatEUR(tx.amount))
+              )
+            );
+          }
+          return h(TransactionRow, {
+            key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories,
+            onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote,
+            onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months,
+          });
+        }),
+    h(ScreenFooter),
+
+    selectMode && selectedCount > 0 ? h('div', {
+      style: {
+        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 16, zIndex: 40,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
+        boxShadow: '0 8px 24px rgba(' + cssVar('--shadow-rgb') + ', 0.2)',
+        padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      },
+    },
+      h('span', { style: { fontSize: 13, color: 'var(--text)' } }, selectedCount + ' selected'),
+      h('button', { className: 'btn-primary', style: { fontSize: 12, padding: '8px 16px' }, onClick: function () { setBulkCategorizeOpen(true); } }, 'Categorize')
+    ) : null,
+
+    monthPickerOpen ? h(MonthFilterSheet, {
+      months: data.months, selected: monthFilter, onToggle: toggleMonthInFilter,
+      onClear: function () { setMonthFilter([]); }, onClose: function () { setMonthPickerOpen(false); },
+    }) : null,
+
+    bulkCategorizeOpen ? h(Sheet, { title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'), onClose: function () { setBulkCategorizeOpen(false); } },
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+        (props.categories || ALL_CATEGORIES).map(function (c) {
+          return h('button', {
+            key: c, onClick: function () { handleBulkCategorize(c); }, className: 'btn-secondary', style: { fontSize: 12 },
+          }, c);
+        })
+      )
+    ) : null
+  );
+}
+
+// Bottom-sheet month-year picker supporting multiple selection, used by the
+// Transactions screen's date filter. Kept as its own component since the
+// same pattern (a scrollable list of checkable month options plus a Clear
+// and Done action) doesn't belong inlined into TransactionsScreen's already
+// long render body.
+function MonthFilterSheet(props) {
+  return h(Sheet, { title: 'Filter by month', onClose: props.onClose },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '50vh', overflowY: 'auto' } },
+      props.months.map(function (mk) {
+        var isChecked = props.selected.indexOf(mk) !== -1;
+        return h('div', {
+          key: mk, onClick: function () { props.onToggle(mk); },
+          style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
+        },
+          h('div', {
+            style: {
+              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+              border: '2px solid ' + (isChecked ? 'var(--accent)' : 'var(--border)'),
+              background: isChecked ? 'var(--accent)' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            },
+          }, isChecked ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+          h('span', { style: { fontSize: 13, color: 'var(--text)' } }, monthLabel(mk))
+        );
+      })
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      h('button', { className: 'btn-secondary', style: { flex: 1 }, onClick: props.onClear }, 'Clear'),
+      h('button', { className: 'btn-primary', style: { flex: 1 }, onClick: props.onClose }, 'Done')
+    )
   );
 }
 
@@ -2203,6 +2612,12 @@ function ReviewUncategorized(props) {
   var creating = creatingState[0], setCreating = creatingState[1];
   var newNameState = useState('');
   var newName = newNameState[0], setNewName = newNameState[1];
+  var multiSelectModeState = useState(false);
+  var multiSelectMode = multiSelectModeState[0], setMultiSelectMode = multiSelectModeState[1];
+  var selectedFragmentsState = useState({});
+  var selectedFragments = selectedFragmentsState[0], setSelectedFragments = selectedFragmentsState[1];
+  var bulkPickerOpenState = useState(false);
+  var bulkPickerOpen = bulkPickerOpenState[0], setBulkPickerOpen = bulkPickerOpenState[1];
 
   function handleCreateAndAssign(fragment) {
     if (!onCreateCategory) return;
@@ -2215,15 +2630,69 @@ function ReviewUncategorized(props) {
     }
   }
 
+  function toggleMultiSelectMode() {
+    setMultiSelectMode(function (prev) { return !prev; });
+    setSelectedFragments({});
+    setOpenFragment(null);
+  }
+
+  function toggleFragmentSelected(fragment) {
+    setSelectedFragments(function (prev) {
+      var next = Object.assign({}, prev);
+      if (next[fragment]) delete next[fragment];
+      else next[fragment] = true;
+      return next;
+    });
+  }
+
+  var selectedFragmentCount = Object.keys(selectedFragments).length;
+
+  function handleBulkAssignToSelectedMerchants(category) {
+    Object.keys(selectedFragments).forEach(function (fragment) { onBulkAssign(fragment, category); });
+    setBulkPickerOpen(false);
+    setMultiSelectMode(false);
+    setSelectedFragments({});
+  }
+
   if (groups.length === 0) {
     return h('p', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Nothing uncategorized right now \u2014 nice.');
   }
 
   return h('div', null,
-    h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 12 } },
-      groups.length + ' uncategorized merchant' + (groups.length === 1 ? '' : 's') + ' \u2014 tap one to see its transactions and assign a category.'),
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 10 } },
+      h('p', { style: { fontSize: 12, color: 'var(--muted)', margin: 0 } },
+        groups.length + ' uncategorized merchant' + (groups.length === 1 ? '' : 's') + (multiSelectMode
+          ? ' \u2014 select several to categorize together.'
+          : ' \u2014 tap one to see its transactions and assign a category.')),
+      h('button', {
+        className: 'btn-secondary', style: { fontSize: 11, flexShrink: 0 }, onClick: toggleMultiSelectMode,
+      }, multiSelectMode ? 'Cancel' : 'Select multiple')
+    ),
     groups.map(function (g) {
       var isOpen = openFragment === g.fragment;
+      var isSelected = Boolean(selectedFragments[g.fragment]);
+      if (multiSelectMode) {
+        return h('div', {
+          key: g.fragment, onClick: function () { toggleFragmentSelected(g.fragment); },
+          style: { display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', padding: '10px 0', cursor: 'pointer' },
+        },
+          h('div', {
+            style: {
+              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+              border: '2px solid ' + (isSelected ? 'var(--accent)' : 'var(--border)'),
+              background: isSelected ? 'var(--accent)' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            },
+          }, isSelected ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+          h('div', { style: { flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            h('div', null,
+              h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment),
+              h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, g.count + ' transaction' + (g.count === 1 ? '' : 's'))
+            ),
+            h('span', { style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } }, formatEUR(g.total))
+          )
+        );
+      }
       return h('div', { key: g.fragment, style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
         h('div', {
           onClick: function () { setOpenFragment(isOpen ? null : g.fragment); setCreating(false); },
@@ -2286,7 +2755,23 @@ function ReviewUncategorized(props) {
           ) : null
         ) : null
       );
-    })
+    }),
+    multiSelectMode && selectedFragmentCount > 0 ? h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 10 } },
+      h('span', { style: { fontSize: 12, color: 'var(--text)' } }, selectedFragmentCount + ' merchant' + (selectedFragmentCount === 1 ? '' : 's') + ' selected'),
+      h('button', { className: 'btn-primary', style: { fontSize: 11, padding: '7px 14px' }, onClick: function () { setBulkPickerOpen(true); } }, 'Categorize')
+    ) : null,
+    bulkPickerOpen ? h(Sheet, {
+      title: 'Categorize ' + selectedFragmentCount + ' merchant' + (selectedFragmentCount === 1 ? '' : 's'),
+      onClose: function () { setBulkPickerOpen(false); },
+    },
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+        categories.map(function (c) {
+          return h('button', {
+            key: c, onClick: function () { handleBulkAssignToSelectedMerchants(c); }, className: 'btn-secondary', style: { fontSize: 12 },
+          }, c);
+        })
+      )
+    ) : null
   );
 }
 
@@ -2595,6 +3080,19 @@ function App() {
     });
   }
 
+  // For an explicit multi-select in Transactions — the person picked these
+  // specific rows themselves, so this applies directly with no merchant-
+  // fragment inference and no standing rule, regardless of how many
+  // different merchants are represented in the selection.
+  var handleApplyCategoryToSelection = useCallback(function (ids, category) {
+    setOverrides(function (prev) {
+      var next = Object.assign({}, prev);
+      ids.forEach(function (id) { next[id] = category; });
+      saveOverrides(next);
+      return next;
+    });
+  }, []);
+
   // Step 1: figure out what WOULD be affected, and only apply immediately if
   // it's just the one transaction being looked at. Anything wider needs the
   // person to see the list and confirm before it's actually applied.
@@ -2719,6 +3217,7 @@ function App() {
     onAddFile: handleFile, status: status, error: error, categories: allCategoriesCombined, onCreateCategory: handleCreateCategory,
     notes: notes, onSetNote: handleSetNote, merchantRules: merchantRules,
     monthOverrides: monthOverrides, onSetMonthOverride: handleSetMonthOverride,
+    onApplyCategoryToSelection: handleApplyCategoryToSelection,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
