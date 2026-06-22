@@ -220,9 +220,18 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.14.1';
+var APP_VERSION = '1.16.0';
 
 var CHANGELOG = [
+  { version: '1.16.0', notes: [
+    'Nova opção "Move to month" em qualquer transação \u2014 útil para um salário que chegou alguns dias antes ou depois e que queres contabilizar no mês correto. A data real do banco nunca é alterada, só o mês usado para totais e gráficos.',
+    'O saldo bancário em "Balance over time" continua a basear-se sempre na data real, mesmo que uma transação tenha sido movida para efeitos de relatório',
+  ]},
+  { version: '1.15.0', notes: [
+    'Corrigido: uma transação de Investimentos positiva (ex: um levantamento) estava a ser contada em duplicado \u2014 como rendimento E como investido \u2014 inflacionando o "Net this month" no Resumo, enquanto Tendências (que não tinha o mesmo erro) mostrava um resultado diferente para o mesmo mês',
+    '"Invested" passa a mostrar só dinheiro que meteste em investimentos esse mês; uma nova linha "Investment withdrawals" mostra separadamente dinheiro que levantaste de volta para a conta \u2014 nenhum dos dois conta como rendimento ou gasto',
+    'O Resumo e as Tendências mostram agora sempre o mesmo valor de "net" para o mesmo mês',
+  ]},
   { version: '1.14.1', notes: [
     'Cada categoria mantém agora sempre a mesma cor no gráfico circular e nos gráficos de linha, independentemente do mês ou da ordem em que aparece',
     'Paleta de cores ampliada, para reduzir a probabilidade de duas categorias diferentes partilharem a mesma cor',
@@ -364,6 +373,10 @@ var FAQ_ITEMS = [
     a: 'A app verifica automaticamente se já tens transações importadas para o mês civil em que realmente estamos hoje. Se não tiveres nenhuma, mostra um aviso em qualquer separador a lembrar para exportares e importares o extrato mais recente da Caixadirecta. O aviso desaparece sozinho assim que importares pelo menos uma transação desse mês.' },
   { q: 'Se categorizar várias transações de um comerciante de uma vez, isso aplica-se a transações futuras desse mesmo comerciante?',
     a: 'Sim, mas só nesse caso específico. Quando confirmas "Apply to all" num ecrã que afeta mais do que uma transação do mesmo comerciante, a app guarda essa escolha como regra permanente \u2014 qualquer transação futura desse comerciante recebe automaticamente a mesma categoria, sem precisares de repetir a ação. Já categorizar uma transação isolada, ou escolher "Just this one transaction", afeta só essa transação e não cria nenhuma regra permanente, porque pode ter sido um caso pontual que não queres repetir para sempre.' },
+  { q: 'Qual a diferença entre "Invested" e "Investment withdrawals" no Resumo?',
+    a: '"Invested" é dinheiro que saiu da conta para um investimento esse mês (uma transação negativa de Investimentos). "Investment withdrawals" é dinheiro que voltou de um investimento para a conta (uma transação positiva de Investimentos) \u2014 por exemplo, se levantaste parte de uma aplicação. Nenhum dos dois conta como rendimento nem como gasto; são acompanhados separadamente para que "Net this month" reflita só o que realmente ganhaste menos o que gastaste.' },
+  { q: 'O meu salário chegou no fim do mês errado. Posso corrigir isso?',
+    a: 'Sim. Toca na transação, depois em "\ud83d\udcc5 Move to month" e escolhe o mês em que queres que ela seja contabilizada. Isto não altera a data real do banco \u2014 continua a mostrar quando a transação aconteceu de verdade \u2014 só muda em que mês ela conta para os totais, gráficos e filtros. O gráfico "Balance over time" continua a usar sempre a data real, já que reflete o saldo bancário tal como aconteceu.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -594,6 +607,7 @@ var OVERRIDES_KEY = 'ledger:category-overrides';
 var CUSTOM_CATEGORIES_KEY = 'ledger:custom-categories';
 var NOTES_KEY = 'ledger:notes';
 var MERCHANT_RULES_KEY = 'ledger:merchant-rules';
+var MONTH_OVERRIDES_KEY = 'ledger:month-overrides';
 
 function loadStoredTransactions() {
   try {
@@ -671,6 +685,25 @@ function saveMerchantRules(rules) {
   localStorage.setItem(MERCHANT_RULES_KEY, JSON.stringify(rules));
 }
 
+// Lets a transaction be counted in a different month than its real bank
+// date — e.g. a salary that landed a few days early and got grouped with
+// the wrong month's totals. The real date is never changed (still shown
+// and still what's exported/backed up as the transaction's own date);
+// this only affects which month bucket it's grouped into for totals,
+// charts, and filtering, keyed by transaction id like overrides/notes.
+function loadMonthOverrides() {
+  try {
+    var raw = localStorage.getItem(MONTH_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveMonthOverrides(overrides) {
+  localStorage.setItem(MONTH_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
 function downloadJSON(filename, data) {
   var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
@@ -728,6 +761,8 @@ function TransactionRow(props) {
   var onCreateCategory = props.onCreateCategory;
   var note = props.note || '';
   var onSetNote = props.onSetNote;
+  var onSetMonthOverride = props.onSetMonthOverride;
+  var availableMonths = props.availableMonths || []; // list of 'YYYY-MM' keys to offer as move targets
   var editingState = useState(false);
   var editing = editingState[0], setEditing = editingState[1];
   var creatingState = useState(false);
@@ -738,6 +773,8 @@ function TransactionRow(props) {
   var editingNote = editingNoteState[0], setEditingNote = editingNoteState[1];
   var noteDraftState = useState(note);
   var noteDraft = noteDraftState[0], setNoteDraft = noteDraftState[1];
+  var editingMonthState = useState(false);
+  var editingMonth = editingMonthState[0], setEditingMonth = editingMonthState[1];
   var isPositive = tx.amount > 0;
 
   function handleCreateAndApply() {
@@ -755,6 +792,7 @@ function TransactionRow(props) {
     setNoteDraft(note);
     setEditingNote(true);
     setEditing(false);
+    setEditingMonth(false);
   }
 
   function saveNote() {
@@ -762,16 +800,32 @@ function TransactionRow(props) {
     setEditingNote(false);
   }
 
+  function openMonthEditor() {
+    setEditingMonth(true);
+    setEditing(false);
+    setEditingNote(false);
+  }
+
+  // The transaction's own real-date month, always offered as an option so
+  // a previously-moved transaction can be moved back to where it actually
+  // belongs, even if that real month isn't otherwise in availableMonths
+  // (e.g. it's the only transaction left for that month after being moved).
+  var realMonthKey = monthKey(tx.dateMov);
+  var monthOptions = availableMonths.indexOf(realMonthKey) === -1
+    ? [realMonthKey].concat(availableMonths)
+    : availableMonths;
+
   return h('div', { style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
     h('div', { style: { display: 'grid', gridTemplateColumns: '60px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 } },
       h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
       h('span', {
-        onClick: function () { setEditing(!editing); setCreating(false); setEditingNote(false); },
+        onClick: function () { setEditing(!editing); setCreating(false); setEditingNote(false); setEditingMonth(false); },
         style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', cursor: 'pointer' },
         title: tx.description,
       },
         tx.description,
         note ? h('span', { style: { color: 'var(--accent)', marginLeft: 5 } }, '\ud83d\udcdd') : null,
+        tx.hasMonthOverride ? h('span', { style: { color: 'var(--accent2)', marginLeft: 5 } }, '\u2192 ' + monthLabel(tx.effectiveMonthKey)) : null,
         h('span', { style: { display: 'block', fontSize: 10, color: tx.isOverride ? 'var(--accent)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' } },
           tx.category + (tx.isOverride ? ' \u00b7  edited' : ''))
       ),
@@ -809,7 +863,14 @@ function TransactionRow(props) {
           fontSize: 11, padding: '5px 10px', borderRadius: 10,
           border: '1px dashed var(--muted)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer',
         },
-      }, note ? '\u270f\ufe0f Edit note' : '\u270f\ufe0f Add note') : null
+      }, note ? '\u270f\ufe0f Edit note' : '\u270f\ufe0f Add note') : null,
+      onSetMonthOverride ? h('button', {
+        onClick: openMonthEditor,
+        style: {
+          fontSize: 11, padding: '5px 10px', borderRadius: 10,
+          border: '1px dashed var(--accent2)', background: 'transparent', color: 'var(--accent2)', cursor: 'pointer',
+        },
+      }, '\ud83d\udcc5 Move to month') : null
     ) : null,
     (editing && creating) ? h('div', { style: { marginTop: 8, display: 'flex', gap: 6 } },
       h('input', {
@@ -838,6 +899,36 @@ function TransactionRow(props) {
         h('button', { onClick: saveNote, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px', flex: 1 } }, 'Save'),
         h('button', { onClick: function () { setEditingNote(false); }, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' } }, 'Cancel')
       )
+    ) : null,
+    editingMonth ? h('div', { style: { marginTop: 8 } },
+      h('p', { style: { fontSize: 11, color: 'var(--muted)', marginBottom: 8 } },
+        'Real date: ' + formatDateWithYear(tx.dateMov) + '. Report this transaction under:'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+        monthOptions.map(function (mk) {
+          var isCurrentEffective = mk === tx.effectiveMonthKey;
+          var isRealUnmoved = mk === realMonthKey && !tx.hasMonthOverride;
+          return h('button', {
+            key: mk,
+            onClick: function () {
+              // Choosing the transaction's own real month is the same as
+              // clearing the override — no point storing a redundant entry.
+              onSetMonthOverride(tx.id, mk === realMonthKey ? null : mk);
+              setEditingMonth(false);
+            },
+            style: {
+              fontSize: 11, padding: '5px 10px', borderRadius: 10,
+              border: '1px solid ' + (isRealUnmoved ? 'var(--border)' : 'var(--border)'),
+              background: isCurrentEffective ? 'var(--text)' : 'var(--surface)',
+              color: isCurrentEffective ? 'var(--bg)' : 'var(--text)',
+              cursor: 'pointer',
+            },
+          }, monthLabel(mk) + (mk === realMonthKey ? ' (real)' : ''));
+        })
+      ),
+      h('button', {
+        onClick: function () { setEditingMonth(false); },
+        className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px', marginTop: 8 },
+      }, 'Cancel')
     ) : null
   );
 }
@@ -1541,20 +1632,27 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides, merchantRules) {
+function useLedgerData(transactions, overrides, merchantRules, monthOverrides) {
   var categorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
+      var monthOverride = monthOverrides ? monthOverrides[tx.id] : null;
       return Object.assign({}, tx, {
         category: override || autoCategory(tx.description, tx.amount, merchantRules),
         isOverride: Boolean(override),
+        // The real bank date is untouched — this only changes which month
+        // a transaction is grouped into for totals and charts, e.g. a
+        // salary that landed a few days early and should be reported
+        // against the following month instead.
+        effectiveMonthKey: monthOverride || monthKey(tx.dateMov),
+        hasMonthOverride: Boolean(monthOverride),
       });
     });
-  }, [transactions, overrides, merchantRules]);
+  }, [transactions, overrides, merchantRules, monthOverrides]);
 
   var months = useMemo(function () {
     var set = {};
-    categorized.forEach(function (tx) { set[monthKey(tx.dateMov)] = true; });
+    categorized.forEach(function (tx) { set[tx.effectiveMonthKey] = true; });
     return Object.keys(set).sort().reverse();
   }, [categorized]);
 
@@ -1563,21 +1661,33 @@ function useLedgerData(transactions, overrides, merchantRules) {
   var monthlyTotals = useMemo(function () {
     var byMonth = {};
     categorized.forEach(function (tx) {
-      var mk = monthKey(tx.dateMov);
-      if (!byMonth[mk]) byMonth[mk] = { spent: 0, income: 0, invested: 0, lastBalance: null, lastDate: null };
-      if (isSpending(tx)) {
+      var mk = tx.effectiveMonthKey;
+      if (!byMonth[mk]) byMonth[mk] = { spent: 0, income: 0, invested: 0, investmentWithdrawals: 0, lastBalance: null, lastDate: null };
+      if (tx.category === 'Investments') {
+        // Split by direction rather than relying on sign alone elsewhere:
+        // money going INTO an investment (a negative transaction) and money
+        // coming BACK from one (a positive transaction, e.g. a withdrawal)
+        // are tracked as two separate, always-positive totals. Neither one
+        // is ever added to "income" or "spent" — a withdrawal returning cash
+        // to the account isn't earnings, and money moved into an investment
+        // isn't a purchase.
+        if (tx.amount < 0) byMonth[mk].invested += Math.abs(tx.amount);
+        else byMonth[mk].investmentWithdrawals += tx.amount;
+      } else if (isSpending(tx)) {
         byMonth[mk].spent += Math.abs(tx.amount);
-      } else if (tx.category === 'Investments') {
-        // Investment moves are excluded from spending, but they're still
-        // outflows of cash — they must NOT be added to income (which they
-        // would be, incorrectly, if we just used an else-branch here).
-        byMonth[mk].invested += Math.abs(tx.amount);
       } else if (tx.amount > 0) {
         byMonth[mk].income += tx.amount;
       }
-      if (byMonth[mk].lastDate === null || tx.dateMov >= byMonth[mk].lastDate) {
-        byMonth[mk].lastDate = tx.dateMov;
-        byMonth[mk].lastBalance = tx.balanceAfter;
+      // Deliberately keyed by the transaction's REAL date (dateMov), not its
+      // effective/reporting month — the running bank balance is a fact about
+      // when the bank actually recorded it, and moving a transaction's
+      // reporting month shouldn't change which balance snapshot shows up in
+      // the "Balance over time" chart for that real-world month.
+      var realMk = monthKey(tx.dateMov);
+      if (!byMonth[realMk]) byMonth[realMk] = { spent: 0, income: 0, invested: 0, investmentWithdrawals: 0, lastBalance: null, lastDate: null };
+      if (byMonth[realMk].lastDate === null || tx.dateMov >= byMonth[realMk].lastDate) {
+        byMonth[realMk].lastDate = tx.dateMov;
+        byMonth[realMk].lastBalance = tx.balanceAfter;
       }
     });
     return byMonth;
@@ -1606,12 +1716,12 @@ function shortMonthLabel(key) {
 // --- Overview screen ------------------------------------------------------
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var selectedMonthState = useState(null);
   var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
   var categoryFilterState = useState(null);
   var categoryFilter = categoryFilterState[0], setCategoryFilter = categoryFilterState[1];
-  var summaryFilterState = useState(null); // null | 'salary' | 'otherIncome' | 'invested'
+  var summaryFilterState = useState(null); // null | 'salary' | 'otherIncome' | 'invested' | 'investmentWithdrawals'
   var summaryFilter = summaryFilterState[0], setSummaryFilter = summaryFilterState[1];
 
   var activeMonth = selectedMonth || data.months[0];
@@ -1707,7 +1817,7 @@ function OverviewScreen(props) {
 
   var monthTx = useMemo(function () {
     return data.categorized
-      .filter(function (tx) { return monthKey(tx.dateMov) === activeMonth; })
+      .filter(function (tx) { return tx.effectiveMonthKey === activeMonth; })
       .sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
   }, [data.categorized, activeMonth]);
 
@@ -1723,18 +1833,23 @@ function OverviewScreen(props) {
 
   var totalSpent = spendingByCategory.reduce(function (sum, c) { return sum + c.amount; }, 0);
   var salaryIncome = monthTx.filter(function (tx) { return tx.category === 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
   var totalIncome = salaryIncome + otherIncome;
-  var invested = monthTx.filter(function (tx) { return tx.category === 'Investments'; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var invested = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var investmentWithdrawals = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
   var netBalance = totalIncome - totalSpent;
 
   var balanceChartData = useMemo(function () {
-    return [
+    var bars = [
       { label: 'In', value: totalIncome, color: 'var(--gain)' },
       { label: 'Spent', value: totalSpent, color: 'var(--loss)' },
       { label: 'Invested', value: invested, color: 'var(--accent2)' },
     ];
-  }, [totalIncome, totalSpent, invested]);
+    if (investmentWithdrawals > 0) {
+      bars.push({ label: 'Withdrawn', value: investmentWithdrawals, color: 'var(--dividend)' });
+    }
+    return bars;
+  }, [totalIncome, totalSpent, invested, investmentWithdrawals]);
 
   var handleToggleSummaryFilter = useCallback(function (key) {
     setSummaryFilter(function (prev) { return prev === key ? null : key; });
@@ -1748,15 +1863,17 @@ function OverviewScreen(props) {
 
   var visibleTx = useMemo(function () {
     if (summaryFilter === 'salary') return monthTx.filter(function (tx) { return tx.category === 'Salary'; });
-    if (summaryFilter === 'otherIncome') return monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary'; });
-    if (summaryFilter === 'invested') return monthTx.filter(function (tx) { return tx.category === 'Investments'; });
+    if (summaryFilter === 'otherIncome') return monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; });
+    if (summaryFilter === 'invested') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; });
+    if (summaryFilter === 'investmentWithdrawals') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; });
     if (categoryFilter) return monthTx.filter(function (tx) { return tx.category === categoryFilter; });
     return monthTx;
   }, [monthTx, categoryFilter, summaryFilter]);
 
   var activeFilterLabel = summaryFilter === 'salary' ? 'Salary'
     : summaryFilter === 'otherIncome' ? 'Other income'
-    : summaryFilter === 'invested' ? 'Invested / saved'
+    : summaryFilter === 'invested' ? 'Invested'
+    : summaryFilter === 'investmentWithdrawals' ? 'Investment withdrawals'
     : categoryFilter;
 
   if (props.transactions.length === 0) {
@@ -1834,9 +1951,21 @@ function OverviewScreen(props) {
           borderRadius: 8, background: summaryFilter === 'invested' ? 'var(--surface2)' : 'transparent',
         },
       },
-        h('span', { style: { color: 'var(--muted)' } }, 'Invested / saved'),
+        h('span', { style: { color: 'var(--muted)' } }, 'Invested'),
         h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(invested))
-      )
+      ),
+      investmentWithdrawals > 0 ? h('button', {
+        onClick: function () { handleToggleSummaryFilter('investmentWithdrawals'); },
+        style: {
+          display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13,
+          fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer', textAlign: 'left',
+          padding: summaryFilter === 'investmentWithdrawals' ? '4px 8px' : '4px 0',
+          borderRadius: 8, background: summaryFilter === 'investmentWithdrawals' ? 'var(--surface2)' : 'transparent',
+        },
+      },
+        h('span', { style: { color: 'var(--muted)' } }, 'Investment withdrawals'),
+        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(investmentWithdrawals))
+      ) : null
     ),
 
     // Donut + balance comparison chart side by side.
@@ -1860,7 +1989,7 @@ function OverviewScreen(props) {
       ),
       visibleTx.length === 0
         ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-        : visibleTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote }); })
+        : visibleTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote, onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months }); })
     ),
     h(ScreenFooter)
   );
@@ -1869,7 +1998,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
 
@@ -1917,7 +2046,7 @@ function TrendsScreen(props) {
       values: data.monthsAscending.map(function (mk) {
         var sum = 0;
         data.categorized.forEach(function (tx) {
-          if (monthKey(tx.dateMov) === mk && tx.category === activeTrendCategory && isSpending(tx)) sum += Math.abs(tx.amount);
+          if (tx.effectiveMonthKey === mk && tx.category === activeTrendCategory && isSpending(tx)) sum += Math.abs(tx.amount);
         });
         return { x: shortMonthLabel(mk), y: sum };
       }),
@@ -1981,7 +2110,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var filterCategoryState = useState(null);
   var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
 
@@ -2023,7 +2152,7 @@ function TransactionsScreen(props) {
     ),
     filtered.length === 0
       ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote }); }),
+      : filtered.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote, onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months }); }),
     h(ScreenFooter)
   );
 }
@@ -2158,7 +2287,7 @@ function ReviewUncategorized(props) {
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
 
   var handleBulkAssign = useCallback(function (fragment, category) {
     // The central onCategoryChange handler already tags every transaction
@@ -2244,6 +2373,8 @@ function App() {
   var notes = notesState[0], setNotes = notesState[1];
   var merchantRulesState = useState(function () { return loadMerchantRules(); });
   var merchantRules = merchantRulesState[0], setMerchantRules = merchantRulesState[1];
+  var monthOverridesState = useState(function () { return loadMonthOverrides(); });
+  var monthOverrides = monthOverridesState[0], setMonthOverrides = monthOverridesState[1];
   var errorState = useState(null);
   var error = errorState[0], setError = errorState[1];
   var statusState = useState(null);
@@ -2488,6 +2619,18 @@ function App() {
     });
   }, []);
 
+  // monthValue of null/empty clears the override, putting the transaction
+  // back under its real bank date for reporting purposes.
+  var handleSetMonthOverride = useCallback(function (id, monthValue) {
+    setMonthOverrides(function (prev) {
+      var next = Object.assign({}, prev);
+      if (monthValue) next[id] = monthValue;
+      else delete next[id];
+      saveMonthOverrides(next);
+      return next;
+    });
+  }, []);
+
 
   var handleBackup = useCallback(function () {
     downloadJSON('ledger-backup-' + new Date().toISOString().slice(0, 10) + '.json', {
@@ -2496,6 +2639,7 @@ function App() {
       customCategories: loadCustomCategories(),
       notes: loadNotes(),
       merchantRules: loadMerchantRules(),
+      monthOverrides: loadMonthOverrides(),
       exportedAt: new Date().toISOString(),
     });
   }, []);
@@ -2512,11 +2656,13 @@ function App() {
         saveCustomCategories(data.customCategories || []);
         saveNotes(data.notes || {});
         saveMerchantRules(data.merchantRules || {});
+        saveMonthOverrides(data.monthOverrides || {});
         setTransactions(Object.values(data.transactions));
         setOverrides(data.overrides || {});
         setCustomCategories(data.customCategories || []);
         setNotes(data.notes || {});
         setMerchantRules(data.merchantRules || {});
+        setMonthOverrides(data.monthOverrides || {});
         setStatus('Backup restored.');
       } catch (err) {
         setError('Could not restore that file: ' + err.message);
@@ -2529,11 +2675,12 @@ function App() {
     transactions: transactions, overrides: overrides, onCategoryChange: handleCategoryChange,
     onAddFile: handleFile, status: status, error: error, categories: allCategoriesCombined, onCreateCategory: handleCreateCategory,
     notes: notes, onSetNote: handleSetNote, merchantRules: merchantRules,
+    monthOverrides: monthOverrides, onSetMonthOverride: handleSetMonthOverride,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
