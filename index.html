@@ -220,9 +220,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.17.0';
+var APP_VERSION = '1.17.1';
 
 var CHANGELOG = [
+  { version: '1.17.1', notes: [
+    'Revertido o pinch-to-zoom nos gr\u00e1ficos de Tend\u00eancias, introduzido na vers\u00e3o anterior \u2014 estava a causar um erro ao abrir a app em alguns dispositivos. O arrastar com um dedo para ver os valores continua a funcionar normalmente.',
+  ]},
   { version: '1.17.0', notes: [
     'Os gr\u00e1ficos de Tend\u00eancias mostram agora o ano junto ao m\u00eas (ex: "Jun \'26")',
     'Novo: pinch-to-zoom nos gr\u00e1ficos \u2014 afasta dois dedos para aumentar o per\u00edodo vis\u00edvel (e o eixo Y ajusta-se automaticamente), aproxima para diminuir, e arrasta com um dedo para navegar enquanto ampliado',
@@ -392,8 +395,6 @@ var FAQ_ITEMS = [
     a: 'Sim. Toca na transação, depois em "\ud83d\udcc5 Move to month" e escolhe o mês em que queres que ela seja contabilizada. Isto não altera a data real do banco \u2014 continua a mostrar quando a transação aconteceu de verdade \u2014 só muda em que mês ela conta para os totais, gráficos e filtros. O gráfico "Balance over time" continua a usar sempre a data real, já que reflete o saldo bancário tal como aconteceu.' },
   { q: 'Reimportei um ficheiro com transações sobrepostas e apareceram duplicadas. Porquê?',
     a: 'Isto era um bug real, já corrigido. O identificador interno de cada transação mudou de formato numa versão anterior da app (para resolver outro problema, de transações genuinamente diferentes no mesmo dia a colidirem). Transações guardadas antes dessa mudança ficaram com um identificador num formato antigo, que deixou de coincidir com o identificador gerado ao reimportar o mesmo ficheiro depois da atualização \u2014 por isso eram tratadas como novas em vez de já existentes. A partir desta versão, a app também verifica pela data, valor e descrição da transação, não só pelo identificador, por isso volta a reconhecer corretamente transações já guardadas mesmo que tenham um identificador de uma versão mais antiga. Se já tiveres duplicados de antes desta correção, terás de os remover manualmente \u2014 a app não os apaga automaticamente, para nunca arriscar apagar algo por engano.' },
-  { q: 'Como funciona o zoom nos gr\u00e1ficos de Tend\u00eancias?',
-    a: 'Afasta dois dedos sobre o gr\u00e1fico para ampliar o per\u00edodo vis\u00edvel \u2014 o eixo vertical ajusta-se automaticamente aos valores desse per\u00edodo. Aproxima os dedos para diminuir o zoom. Enquanto ampliado, arrasta com um dedo para navegar para a esquerda ou direita. Aparece um bot\u00e3o "Reset zoom" para voltar \u00e0 vista completa.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
     a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
@@ -1006,46 +1007,8 @@ function LineChart(props) {
     instanceIdRef.current = Math.round(Math.random() * 1e6);
   }
 
-  var fullLength = series[0] ? series[0].values.length : 0;
-
-  // --- Pinch-to-zoom + pan -----------------------------------------------
-  // viewWindow is the [startIdx, endIdx] slice (inclusive) of the full data
-  // currently shown — pinching narrows/widens it (zoom), a single-finger
-  // drag while already zoomed pans it sideways. Both axes recompute from
-  // only the points inside this window, so zooming in also rescales the
-  // y-axis to fit just the visible range rather than staying fixed to the
-  // full series' min/max.
-  var viewWindowState = useState(null); // null = full range, else [startIdx, endIdx]
-  var viewWindow = viewWindowState[0], setViewWindow = viewWindowState[1];
-  var startIdx = viewWindow ? viewWindow[0] : 0;
-  var endIdx = viewWindow ? viewWindow[1] : Math.max(0, fullLength - 1);
-  var isZoomed = viewWindow !== null;
-
-  var pinchRef = useRef(null); // { startDist, startWindow } while a 2-finger gesture is active
-  var panRef = useRef(null); // { startX, startWindow } while a 1-finger pan is active (only when zoomed)
-
-  function clampWindow(s, e) {
-    s = Math.max(0, Math.round(s));
-    e = Math.min(fullLength - 1, Math.round(e));
-    if (e - s < 1) { // never zoom in past 2 visible points — a single point can't show a trend
-      if (s === 0) e = Math.min(fullLength - 1, 1);
-      else s = Math.max(0, e - 1);
-    }
-    return [s, e];
-  }
-
-  function resetZoom() {
-    setViewWindow(null);
-  }
-
-  var visibleSeries = useMemo(function () {
-    return series.map(function (s) {
-      return Object.assign({}, s, { values: s.values.slice(startIdx, endIdx + 1) });
-    });
-  }, [series, startIdx, endIdx]);
-
   var allValues = [];
-  visibleSeries.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
   var maxVal = Math.max.apply(null, allValues.concat([0]));
   var minVal = Math.min.apply(null, allValues.concat([0]));
   if (maxVal === minVal) maxVal = minVal + 1;
@@ -1053,7 +1016,7 @@ function LineChart(props) {
   // gradient fill) never gets visually clipped against the top edge.
   maxVal += (maxVal - minVal) * 0.08;
 
-  var labels = visibleSeries[0] ? visibleSeries[0].values.map(function (v) { return v.x; }) : [];
+  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
   var innerW = width - padding.left - padding.right;
   var innerH = height - padding.top - padding.bottom;
 
@@ -1095,7 +1058,7 @@ function LineChart(props) {
   var showZeroLine = colorBySign && minVal < 0 && maxVal > 0;
   var zeroY = showZeroLine ? yPos(0) : null;
 
-  var seriesData = visibleSeries.map(function (s, si) {
+  var seriesData = series.map(function (s, si) {
     var color = s.color || CHART_COLORS[si % CHART_COLORS.length];
     var points = s.values.map(function (v, i) { return { x: xPos(i), y: yPos(v.y), value: v.y }; });
     var linePath = smoothPath(points);
@@ -1119,7 +1082,7 @@ function LineChart(props) {
     };
   });
 
-  // --- Touch/drag crosshair, pinch-zoom, and pan --------------------------
+  // --- Touch/drag crosshair --------------------------------------------
   var activeIdxState = useState(null);
   var activeIdx = activeIdxState[0], setActiveIdx = activeIdxState[1];
   var containerRef = useRef(null);
@@ -1138,64 +1101,12 @@ function LineChart(props) {
     return closest;
   }
 
-  function touchDistance(touches) {
-    var dx = touches[0].clientX - touches[1].clientX;
-    var dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function handleTouchStart(e) {
-    if (e.touches.length === 2) {
-      pinchRef.current = { startDist: touchDistance(e.touches), startWindow: [startIdx, endIdx] };
-      panRef.current = null;
-      setActiveIdx(null);
-    } else if (e.touches.length === 1) {
-      if (isZoomed) {
-        panRef.current = { startX: e.touches[0].clientX, startWindow: [startIdx, endIdx] };
-      }
-      var idx = nearestIndexForClientX(e.touches[0].clientX);
-      if (idx !== null) setActiveIdx(idx);
-    }
-  }
-
   function handleTouchMove(e) {
-    if (e.touches.length === 2 && pinchRef.current) {
-      var dist = touchDistance(e.touches);
-      var ratio = pinchRef.current.startDist / Math.max(dist, 1); // pinch out (dist grows) -> ratio < 1 -> zoom in
-      var sw = pinchRef.current.startWindow;
-      var span = sw[1] - sw[0];
-      var center = (sw[0] + sw[1]) / 2;
-      var newSpan = Math.max(1, Math.min(fullLength - 1, span * ratio));
-      var clamped = clampWindow(center - newSpan / 2, center + newSpan / 2);
-      setViewWindow(clamped);
-      return;
-    }
-    if (e.touches.length === 1 && panRef.current) {
-      var el = containerRef.current;
-      if (!el) return;
-      var rect = el.getBoundingClientRect();
-      if (rect.width === 0) return;
-      var dxPx = e.touches[0].clientX - panRef.current.startX;
-      var dxSvg = (dxPx / rect.width) * width;
-      var dxIdx = -(dxSvg / innerW) * (panRef.current.startWindow[1] - panRef.current.startWindow[0] || 1);
-      var sw2 = panRef.current.startWindow;
-      setViewWindow(clampWindow(sw2[0] + dxIdx, sw2[1] + dxIdx));
-      return;
-    }
-    if (e.touches.length === 1) {
-      var idx2 = nearestIndexForClientX(e.touches[0].clientX);
-      if (idx2 !== null) setActiveIdx(idx2);
-    }
+    var idx = nearestIndexForClientX(e.touches[0].clientX);
+    if (idx !== null) setActiveIdx(idx);
   }
-
-  function handleTouchEnd(e) {
-    if (e.touches.length === 0) {
-      pinchRef.current = null;
-      panRef.current = null;
-      setActiveIdx(null);
-    } else if (e.touches.length === 1) {
-      pinchRef.current = null;
-    }
+  function handleTouchEnd() {
+    setActiveIdx(null);
   }
 
   var tooltipLeftPct = activeIdx !== null ? (xPos(activeIdx) / width) * 100 : 0;
@@ -1203,24 +1114,16 @@ function LineChart(props) {
   // edge, so it never gets clipped by the container.
   var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
 
-  return h('div', { style: { position: 'relative' } },
-    isZoomed ? h('button', {
-      onClick: resetZoom,
-      style: {
-        position: 'absolute', top: -4, right: 0, zIndex: 3, fontSize: 10, padding: '4px 10px',
-        borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--muted)', cursor: 'pointer',
-      },
-    }, '\u21ba Reset zoom') : null,
-    h('div', {
-      ref: containerRef,
-      style: {
-        position: 'relative', touchAction: isZoomed ? 'none' : 'pan-y',
-        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
-      },
-      onTouchStart: handleTouchStart,
-      onTouchMove: handleTouchMove,
-      onTouchEnd: handleTouchEnd,
+  return h('div', {
+    ref: containerRef,
+    style: {
+      position: 'relative', touchAction: 'pan-y',
+      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
     },
+    onTouchStart: handleTouchMove,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleTouchEnd,
+  },
     activeIdx !== null ? h('div', {
       style: {
         position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
@@ -1234,7 +1137,7 @@ function LineChart(props) {
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
       seriesData.map(function (sd, si) {
-        var val = visibleSeries[si].values[activeIdx].y;
+        var val = series[si].values[activeIdx].y;
         var dotColor = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: dotColor, display: 'inline-block', flexShrink: 0 } }),
@@ -1294,15 +1197,9 @@ function LineChart(props) {
         }, label);
       })
     )
-    )
   );
 }
 
-// Bar-chart equivalent of LineChart, for the same { name, color, values }
-// series shape, supporting the same drag-to-inspect tooltip and optional
-// per-bar coloring by sign. Kept separate from SimpleBarChart below, which
-// serves a different shape of data (a flat list of labeled totals, not a
-// time series) and isn't meant to be interactive in the same way.
 function TimeSeriesBarChart(props) {
   var series = props.series;
   var colorBySign = props.colorBySign;
@@ -1310,54 +1207,18 @@ function TimeSeriesBarChart(props) {
   var width = 440;
   var padding = { top: 16, right: 8, bottom: 24, left: 44 };
 
-  var fullLength = series[0] ? series[0].values.length : 0;
-
-  // Same pinch-to-zoom / pan-when-zoomed model as LineChart — see the
-  // comment there for the full rationale. Kept duplicated rather than
-  // shared since the two charts differ enough in their rendering (bars vs.
-  // a smoothed path) that a shared hook would need almost as many
-  // chart-specific branches as just having two copies.
-  var viewWindowState = useState(null);
-  var viewWindow = viewWindowState[0], setViewWindow = viewWindowState[1];
-  var startIdx = viewWindow ? viewWindow[0] : 0;
-  var endIdx = viewWindow ? viewWindow[1] : Math.max(0, fullLength - 1);
-  var isZoomed = viewWindow !== null;
-
-  var pinchRef = useRef(null);
-  var panRef = useRef(null);
-
-  function clampWindow(s, e) {
-    s = Math.max(0, Math.round(s));
-    e = Math.min(fullLength - 1, Math.round(e));
-    if (e - s < 1) {
-      if (s === 0) e = Math.min(fullLength - 1, 1);
-      else s = Math.max(0, e - 1);
-    }
-    return [s, e];
-  }
-
-  function resetZoom() {
-    setViewWindow(null);
-  }
-
-  var visibleSeries = useMemo(function () {
-    return series.map(function (s) {
-      return Object.assign({}, s, { values: s.values.slice(startIdx, endIdx + 1) });
-    });
-  }, [series, startIdx, endIdx]);
-
   var allValues = [];
-  visibleSeries.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
   var maxVal = Math.max.apply(null, allValues.concat([0]));
   var minVal = Math.min.apply(null, allValues.concat([0]));
   if (maxVal === minVal) maxVal = minVal + 1;
   maxVal += (maxVal - minVal) * 0.08;
   if (minVal < 0) minVal -= (maxVal - minVal) * 0.08;
 
-  var labels = visibleSeries[0] ? visibleSeries[0].values.map(function (v) { return v.x; }) : [];
+  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
   var innerW = width - padding.left - padding.right;
   var innerH = height - padding.top - padding.bottom;
-  var seriesCount = visibleSeries.length;
+  var seriesCount = series.length;
   var slotW = labels.length > 0 ? innerW / labels.length : innerW;
   var barW = Math.max(3, (slotW * 0.6) / seriesCount);
 
@@ -1394,87 +1255,27 @@ function TimeSeriesBarChart(props) {
     return closest;
   }
 
-  function touchDistance(touches) {
-    var dx = touches[0].clientX - touches[1].clientX;
-    var dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function handleTouchStart(e) {
-    if (e.touches.length === 2) {
-      pinchRef.current = { startDist: touchDistance(e.touches), startWindow: [startIdx, endIdx] };
-      panRef.current = null;
-      setActiveIdx(null);
-    } else if (e.touches.length === 1) {
-      if (isZoomed) {
-        panRef.current = { startX: e.touches[0].clientX, startWindow: [startIdx, endIdx] };
-      }
-      var idx = nearestIndexForClientX(e.touches[0].clientX);
-      if (idx !== null) setActiveIdx(idx);
-    }
-  }
-
   function handleTouchMove(e) {
-    if (e.touches.length === 2 && pinchRef.current) {
-      var dist = touchDistance(e.touches);
-      var ratio = pinchRef.current.startDist / Math.max(dist, 1);
-      var sw = pinchRef.current.startWindow;
-      var span = sw[1] - sw[0];
-      var center = (sw[0] + sw[1]) / 2;
-      var newSpan = Math.max(1, Math.min(fullLength - 1, span * ratio));
-      var clamped = clampWindow(center - newSpan / 2, center + newSpan / 2);
-      setViewWindow(clamped);
-      return;
-    }
-    if (e.touches.length === 1 && panRef.current) {
-      var el = containerRef.current;
-      if (!el) return;
-      var rect = el.getBoundingClientRect();
-      if (rect.width === 0) return;
-      var dxPx = e.touches[0].clientX - panRef.current.startX;
-      var dxSvg = (dxPx / rect.width) * width;
-      var dxIdx = -(dxSvg / innerW) * (panRef.current.startWindow[1] - panRef.current.startWindow[0] || 1);
-      var sw2 = panRef.current.startWindow;
-      setViewWindow(clampWindow(sw2[0] + dxIdx, sw2[1] + dxIdx));
-      return;
-    }
-    if (e.touches.length === 1) {
-      var idx2 = nearestIndexForClientX(e.touches[0].clientX);
-      if (idx2 !== null) setActiveIdx(idx2);
-    }
+    var idx = nearestIndexForClientX(e.touches[0].clientX);
+    if (idx !== null) setActiveIdx(idx);
   }
-
-  function handleTouchEnd(e) {
-    if (e.touches.length === 0) {
-      pinchRef.current = null;
-      panRef.current = null;
-      setActiveIdx(null);
-    } else if (e.touches.length === 1) {
-      pinchRef.current = null;
-    }
+  function handleTouchEnd() {
+    setActiveIdx(null);
   }
 
   var tooltipLeftPct = activeIdx !== null ? (slotCenterX(activeIdx) / width) * 100 : 0;
   var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
 
-  return h('div', { style: { position: 'relative' } },
-    isZoomed ? h('button', {
-      onClick: resetZoom,
-      style: {
-        position: 'absolute', top: -4, right: 0, zIndex: 3, fontSize: 10, padding: '4px 10px',
-        borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--muted)', cursor: 'pointer',
-      },
-    }, '\u21ba Reset zoom') : null,
-    h('div', {
-      ref: containerRef,
-      style: {
-        position: 'relative', touchAction: isZoomed ? 'none' : 'pan-y',
-        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
-      },
-      onTouchStart: handleTouchStart,
-      onTouchMove: handleTouchMove,
-      onTouchEnd: handleTouchEnd,
+  return h('div', {
+    ref: containerRef,
+    style: {
+      position: 'relative', touchAction: 'pan-y',
+      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
     },
+    onTouchStart: handleTouchMove,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleTouchEnd,
+  },
     activeIdx !== null ? h('div', {
       style: {
         position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
@@ -1487,7 +1288,7 @@ function TimeSeriesBarChart(props) {
       },
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
-      visibleSeries.map(function (s, si) {
+      series.map(function (s, si) {
         var val = s.values[activeIdx].y;
         var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
@@ -1504,7 +1305,7 @@ function TimeSeriesBarChart(props) {
         );
       }),
       labels.map(function (label, i) {
-        return visibleSeries.map(function (s, si) {
+        return series.map(function (s, si) {
           var val = s.values[i].y;
           var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
           var barX = slotCenterX(i) - (barW * seriesCount) / 2 + barW * si;
@@ -1534,7 +1335,6 @@ function TimeSeriesBarChart(props) {
           textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
         }, label);
       })
-    )
     )
   );
 }
