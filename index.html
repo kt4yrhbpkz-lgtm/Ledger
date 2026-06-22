@@ -220,9 +220,14 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.18.1';
+var APP_VERSION = '1.18.2';
 
 var CHANGELOG = [
+  { version: '1.18.2', notes: [
+    'As varia\u00e7\u00f5es de m\u00eas/ano abaixo dos valores no Resumo passam a estar alinhadas \u00e0 direita, por baixo do pr\u00f3prio valor',
+    'Em "Spent", a varia\u00e7\u00e3o mostra agora vermelho quando gastas mais do que antes, e verde quando gastas menos \u2014 ao contr\u00e1rio das outras m\u00e9tricas',
+    'Em Transactions, os filtros de categoria deixam de exigir deslizar para os lados \u2014 organizam-se agora em v\u00e1rias linhas, e o bloco completo de filtros (pesquisa, m\u00eas, categoria) fica fixo no topo do ecr\u00e3 enquanto fazes scroll pelas transa\u00e7\u00f5es',
+  ]},
   { version: '1.18.1', notes: [
     'Paleta de cores do gr\u00e1fico circular e dos gr\u00e1ficos de linha/barras tornada mais viva e satura, mantendo cada categoria sempre com a mesma cor',
     'Otimiza\u00e7\u00e3o: removida l\u00f3gica duplicada no c\u00e1lculo dos n\u00fameros do Resumo (Net, Salary, Other income, Spent, Invested), agora partilhada com o c\u00e1lculo usado nas compara\u00f5es de m\u00eas anterior/ano anterior',
@@ -1822,6 +1827,10 @@ function buildComparison(currentValue, comparisonMetrics, key) {
 // empty row that would just look like a layout gap.
 function ComparisonRow(props) {
   var vsMonth = props.vsMonth, vsYear = props.vsYear, mode = props.mode; // mode: 'percent' | 'absolute'
+  // For metrics where "more" is actually worse — Spent being the obvious
+  // case — green/red needs to flip: spending MORE than before shows red,
+  // spending LESS shows green, the opposite of every other metric here.
+  var invertColor = props.invertColor;
 
   function formatOne(cmp) {
     if (!cmp) return null;
@@ -1836,16 +1845,18 @@ function ComparisonRow(props) {
 
   function colorFor(cmp) {
     if (!cmp || cmp.isFlat) return 'var(--muted)';
-    if (cmp.isNew) return 'var(--accent2)';
+    if (cmp.isNew) return invertColor ? 'var(--loss)' : 'var(--accent2)';
     var delta = mode === 'percent' ? cmp.percent : cmp.absolute;
-    return delta >= 0 ? 'var(--gain)' : 'var(--loss)';
+    var isIncrease = delta >= 0;
+    var isGood = invertColor ? !isIncrease : isIncrease;
+    return isGood ? 'var(--gain)' : 'var(--loss)';
   }
 
   var monthText = formatOne(vsMonth);
   var yearText = formatOne(vsYear);
   if (monthText === null && yearText === null) return null;
 
-  return h('div', { style: { display: 'flex', gap: 10, fontSize: 10, marginTop: 2 } },
+  return h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 10, fontSize: 10, marginTop: 2 } },
     monthText !== null ? h('span', { style: { color: colorFor(vsMonth) } }, monthText + ' mo.') : null,
     yearText !== null ? h('span', { style: { color: colorFor(vsYear) } }, yearText + ' yr.') : null
   );
@@ -2136,7 +2147,7 @@ function OverviewScreen(props) {
           h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
           h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } }, formatEUR(totalSpent))
         ),
-        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.totalSpent, vsYear: comparisons.vsPrevYear.totalSpent, mode: comparisonMode })
+        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.totalSpent, vsYear: comparisons.vsPrevYear.totalSpent, mode: comparisonMode, invertColor: true })
       ),
       h('button', {
         onClick: function () { handleToggleSummaryFilter('invested'); },
@@ -2409,40 +2420,54 @@ function TransactionsScreen(props) {
       }, selectMode ? 'Cancel' : 'Select')
     ),
 
-    h('div', { style: { marginBottom: 12 } },
-      h('input', {
-        type: 'text', value: searchText, placeholder: 'Search description, category, or note\u2026',
-        onChange: function (e) { setSearchText(e.target.value); },
-        style: {
-          width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 10,
-          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-        },
-      })
-    ),
-
-    h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' } },
-      h('button', {
-        className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setMonthPickerOpen(true); },
-      }, monthFilter.length === 0 ? '\ud83d\udcc5 All months' : '\ud83d\udcc5 ' + monthFilter.length + ' month' + (monthFilter.length === 1 ? '' : 's')),
-      hasAnyFilter ? h('button', {
-        className: 'btn-secondary', style: { fontSize: 11, color: 'var(--loss)' }, onClick: clearAllFilters,
-      }, '\u2715 Clear all filters') : null
-    ),
-
-    h('div', { style: { display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 } },
-      allCategories.map(function (c) {
-        return h('button', {
-          key: c,
-          onClick: function () { setFilterCategory(c === filterCategory ? null : c); },
-          className: 'btn-secondary',
+    // The whole filter block (search, month picker, clear-all, category
+    // chips) stays pinned to the top of the screen while the transaction
+    // list below scrolls underneath it — same sticky technique used for
+    // the month-pill strip in Overview, so filters never disappear
+    // mid-scroll and there's no need to scroll back up to change one.
+    h('div', {
+      style: {
+        position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg)',
+        paddingTop: 4, marginTop: -4, paddingBottom: 10,
+      },
+    },
+      h('div', { style: { marginBottom: 10 } },
+        h('input', {
+          type: 'text', value: searchText, placeholder: 'Search description, category, or note\u2026',
+          onChange: function (e) { setSearchText(e.target.value); },
           style: {
-            flexShrink: 0, fontSize: 11,
-            background: c === filterCategory ? 'var(--text)' : 'var(--surface)',
-            color: c === filterCategory ? 'var(--bg)' : 'var(--text)',
-            borderColor: c === filterCategory ? 'var(--text)' : 'var(--border)',
+            width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 10,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
           },
-        }, c);
-      })
+        })
+      ),
+
+      h('div', { style: { display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' } },
+        h('button', {
+          className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setMonthPickerOpen(true); },
+        }, monthFilter.length === 0 ? '\ud83d\udcc5 All months' : '\ud83d\udcc5 ' + monthFilter.length + ' month' + (monthFilter.length === 1 ? '' : 's')),
+        hasAnyFilter ? h('button', {
+          className: 'btn-secondary', style: { fontSize: 11, color: 'var(--loss)' }, onClick: clearAllFilters,
+        }, '\u2715 Clear all filters') : null
+      ),
+
+      // Wraps onto as many lines as needed instead of scrolling sideways —
+      // every category is reachable with a tap, no horizontal gesture.
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        allCategories.map(function (c) {
+          return h('button', {
+            key: c,
+            onClick: function () { setFilterCategory(c === filterCategory ? null : c); },
+            className: 'btn-secondary',
+            style: {
+              fontSize: 11,
+              background: c === filterCategory ? 'var(--text)' : 'var(--surface)',
+              color: c === filterCategory ? 'var(--bg)' : 'var(--text)',
+              borderColor: c === filterCategory ? 'var(--text)' : 'var(--border)',
+            },
+          }, c);
+        })
+      )
     ),
 
     filtered.length === 0
