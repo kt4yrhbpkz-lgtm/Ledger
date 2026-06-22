@@ -220,9 +220,14 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.13.0';
+var APP_VERSION = '1.14.0';
 
 var CHANGELOG = [
+  { version: '1.14.0', notes: [
+    'Corrigido: arrastar o dedo sobre os gráficos para ver os valores estava a selecionar texto por baixo',
+    '"Monthly net" e "Balance over time" mostram agora vermelho quando o valor é negativo, com uma linha de referência no zero quando os dados cruzam essa fronteira',
+    'Cada gráfico em Tendências tem agora um interruptor para alternar entre linha e barras, independente dos outros',
+  ]},
   { version: '1.13.0', notes: [
     'Quando confirmas uma categorização em massa (afetando várias transações do mesmo comerciante), essa categoria passa a ser aplicada automaticamente a qualquer transação futura desse comerciante, sem precisares de repetir a ação',
     'Categorizar uma transação única, ou escolher "Just this one transaction", continua a afetar só essa transação \u2014 não cria uma regra permanente',
@@ -845,6 +850,10 @@ var CHART_COLORS = ['#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85
 
 function LineChart(props) {
   var series = props.series; // [{ name, color, values: [{x: label, y: number}] }]
+  // When set, overrides the line/point color per-segment based on whether
+  // the value is negative — used for series like "monthly net" where the
+  // sign itself is the meaningful signal, not just the trend shape.
+  var colorBySign = props.colorBySign; // { positive: '#...', negative: '#...' } | undefined
   var height = props.height || 170;
   var width = 440;
   var padding = { top: 16, right: 8, bottom: 24, left: 44 };
@@ -904,14 +913,34 @@ function LineChart(props) {
     return { y: yPos(val), label: formatEUR(val) };
   });
 
+  // Only drawn when the data actually straddles zero — a fixed reference
+  // line for series like "monthly net", where whether a point is above or
+  // below zero is the whole point, not just its magnitude.
+  var showZeroLine = colorBySign && minVal < 0 && maxVal > 0;
+  var zeroY = showZeroLine ? yPos(0) : null;
+
   var seriesData = series.map(function (s, si) {
     var color = s.color || CHART_COLORS[si % CHART_COLORS.length];
-    var points = s.values.map(function (v, i) { return { x: xPos(i), y: yPos(v.y) }; });
+    var points = s.values.map(function (v, i) { return { x: xPos(i), y: yPos(v.y), value: v.y }; });
     var linePath = smoothPath(points);
     var areaPath = points.length > 1
       ? linePath + ' L ' + points[points.length - 1].x + ' ' + (padding.top + innerH) + ' L ' + points[0].x + ' ' + (padding.top + innerH) + ' Z'
       : '';
-    return { name: s.name, color: color, points: points, linePath: linePath, areaPath: areaPath, gradientId: 'lg' + si + '_' + instanceIdRef.current };
+    // Per-segment coloring: each short line between two consecutive points
+    // is colored by the sign of its ENDING value, so a line crossing from
+    // negative to positive visibly changes color partway through rather
+    // than the whole series being one fixed color.
+    var segments = [];
+    if (colorBySign) {
+      for (var i = 0; i < points.length - 1; i++) {
+        var segColor = points[i + 1].value < 0 ? colorBySign.negative : colorBySign.positive;
+        segments.push({ d: 'M ' + points[i].x + ' ' + points[i].y + ' L ' + points[i + 1].x + ' ' + points[i + 1].y, color: segColor });
+      }
+    }
+    return {
+      name: s.name, color: color, points: points, linePath: linePath, areaPath: areaPath,
+      segments: segments, gradientId: 'lg' + si + '_' + instanceIdRef.current,
+    };
   });
 
   // --- Touch/drag crosshair --------------------------------------------
@@ -948,7 +977,10 @@ function LineChart(props) {
 
   return h('div', {
     ref: containerRef,
-    style: { position: 'relative', touchAction: 'pan-y' },
+    style: {
+      position: 'relative', touchAction: 'pan-y',
+      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+    },
     onTouchStart: handleTouchMove,
     onTouchMove: handleTouchMove,
     onTouchEnd: handleTouchEnd,
@@ -966,9 +998,11 @@ function LineChart(props) {
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
       seriesData.map(function (sd, si) {
+        var val = series[si].values[activeIdx].y;
+        var dotColor = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
-          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: sd.color, display: 'inline-block', flexShrink: 0 } }),
-          (sd.name ? sd.name + ': ' : '') + formatEUR(series[si].values[activeIdx].y)
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: dotColor, display: 'inline-block', flexShrink: 0 } }),
+          (sd.name ? sd.name + ': ' : '') + formatEUR(val)
         );
       })
     ) : null,
@@ -987,17 +1021,26 @@ function LineChart(props) {
           h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
         );
       }),
+      showZeroLine ? h('line', {
+        x1: padding.left, x2: width - padding.right, y1: zeroY, y2: zeroY,
+        stroke: cssVar('--text'), strokeWidth: 1, strokeOpacity: 0.4,
+      }) : null,
       seriesData.map(function (sd, si) {
         return h('path', { key: 'area' + si, d: sd.areaPath, fill: 'url(#' + sd.gradientId + ')', stroke: 'none' });
       }),
       seriesData.map(function (sd, si) {
         return h('g', { key: 'line' + si },
-          h('path', { d: sd.linePath, fill: 'none', stroke: sd.color, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+          colorBySign
+            ? sd.segments.map(function (seg, segi) {
+                return h('path', { key: segi, d: seg.d, fill: 'none', stroke: seg.color, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' });
+              })
+            : h('path', { d: sd.linePath, fill: 'none', stroke: sd.color, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }),
           sd.points.map(function (p, i) {
             var isActive = activeIdx === i;
+            var pointColor = colorBySign ? (p.value < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
             return h('circle', {
               key: i, cx: p.x, cy: p.y, r: isActive ? 5 : 3,
-              fill: isActive ? sd.color : cssVar('--surface'), stroke: sd.color, strokeWidth: 2,
+              fill: isActive ? pointColor : cssVar('--surface'), stroke: pointColor, strokeWidth: 2,
               style: { transition: 'r 0.1s' },
             });
           })
@@ -1011,6 +1054,150 @@ function LineChart(props) {
         if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
         return h('text', {
           key: i, x: xPos(i), y: height - 6, fontSize: 9, fill: cssVar('--muted'),
+          textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
+        }, label);
+      })
+    )
+  );
+}
+
+// Bar-chart equivalent of LineChart, for the same { name, color, values }
+// series shape, supporting the same drag-to-inspect tooltip and optional
+// per-bar coloring by sign. Kept separate from SimpleBarChart below, which
+// serves a different shape of data (a flat list of labeled totals, not a
+// time series) and isn't meant to be interactive in the same way.
+function TimeSeriesBarChart(props) {
+  var series = props.series;
+  var colorBySign = props.colorBySign;
+  var height = props.height || 170;
+  var width = 440;
+  var padding = { top: 16, right: 8, bottom: 24, left: 44 };
+
+  var allValues = [];
+  series.forEach(function (s) { s.values.forEach(function (v) { allValues.push(v.y); }); });
+  var maxVal = Math.max.apply(null, allValues.concat([0]));
+  var minVal = Math.min.apply(null, allValues.concat([0]));
+  if (maxVal === minVal) maxVal = minVal + 1;
+  maxVal += (maxVal - minVal) * 0.08;
+  if (minVal < 0) minVal -= (maxVal - minVal) * 0.08;
+
+  var labels = series[0] ? series[0].values.map(function (v) { return v.x; }) : [];
+  var innerW = width - padding.left - padding.right;
+  var innerH = height - padding.top - padding.bottom;
+  var seriesCount = series.length;
+  var slotW = labels.length > 0 ? innerW / labels.length : innerW;
+  var barW = Math.max(3, (slotW * 0.6) / seriesCount);
+
+  function slotCenterX(i) {
+    return padding.left + slotW * i + slotW / 2;
+  }
+  function yPos(val) {
+    return padding.top + innerH - ((val - minVal) / (maxVal - minVal)) * innerH;
+  }
+
+  var gridLines = [0, 0.5, 1].map(function (frac) {
+    var val = minVal + (maxVal - minVal) * frac;
+    return { y: yPos(val), label: formatEUR(val) };
+  });
+
+  var zeroY = yPos(0);
+  var showZeroLine = minVal < 0 && maxVal > 0;
+
+  var activeIdxState = useState(null);
+  var activeIdx = activeIdxState[0], setActiveIdx = activeIdxState[1];
+  var containerRef = useRef(null);
+
+  function nearestIndexForClientX(clientX) {
+    var el = containerRef.current;
+    if (!el || labels.length === 0) return null;
+    var rect = el.getBoundingClientRect();
+    if (rect.width === 0) return null;
+    var svgX = ((clientX - rect.left) / rect.width) * width;
+    var closest = 0, closestDist = Infinity;
+    for (var i = 0; i < labels.length; i++) {
+      var dist = Math.abs(slotCenterX(i) - svgX);
+      if (dist < closestDist) { closestDist = dist; closest = i; }
+    }
+    return closest;
+  }
+
+  function handleTouchMove(e) {
+    var idx = nearestIndexForClientX(e.touches[0].clientX);
+    if (idx !== null) setActiveIdx(idx);
+  }
+  function handleTouchEnd() {
+    setActiveIdx(null);
+  }
+
+  var tooltipLeftPct = activeIdx !== null ? (slotCenterX(activeIdx) / width) * 100 : 0;
+  var tooltipAlign = tooltipLeftPct > 65 ? 'right' : tooltipLeftPct < 35 ? 'left' : 'center';
+
+  return h('div', {
+    ref: containerRef,
+    style: {
+      position: 'relative', touchAction: 'pan-y',
+      userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+    },
+    onTouchStart: handleTouchMove,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleTouchEnd,
+  },
+    activeIdx !== null ? h('div', {
+      style: {
+        position: 'absolute', top: 0, padding: '8px 12px', borderRadius: 10,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        boxShadow: '0 6px 18px rgba(' + cssVar('--shadow-rgb') + ', 0.18)',
+        fontSize: 11, whiteSpace: 'nowrap', zIndex: 2, pointerEvents: 'none',
+        left: tooltipAlign === 'left' ? '0%' : tooltipAlign === 'right' ? 'auto' : tooltipLeftPct + '%',
+        right: tooltipAlign === 'right' ? '0%' : 'auto',
+        transform: tooltipAlign === 'center' ? 'translateX(-50%)' : 'none',
+      },
+    },
+      h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
+      series.map(function (s, si) {
+        var val = s.values[activeIdx].y;
+        var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
+        return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: color, display: 'inline-block', flexShrink: 0 } }),
+          (s.name ? s.name + ': ' : '') + formatEUR(val)
+        );
+      })
+    ) : null,
+    h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block', overflow: 'visible' } },
+      gridLines.map(function (gl, i) {
+        return h('g', { key: i },
+          h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
+          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+        );
+      }),
+      labels.map(function (label, i) {
+        return series.map(function (s, si) {
+          var val = s.values[i].y;
+          var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
+          var barX = slotCenterX(i) - (barW * seriesCount) / 2 + barW * si;
+          var barTop = Math.min(yPos(val), zeroY);
+          var barHeight = Math.max(1, Math.abs(yPos(val) - zeroY));
+          var isActive = activeIdx === i;
+          return h('rect', {
+            key: si + '-' + i, x: barX, y: showZeroLine ? barTop : Math.min(yPos(val), padding.top + innerH),
+            width: barW, height: showZeroLine ? barHeight : Math.max(1, padding.top + innerH - yPos(val)),
+            fill: color, opacity: isActive ? 1 : 0.85, rx: 2,
+            style: { transition: 'opacity 0.1s' },
+          });
+        });
+      }),
+      showZeroLine ? h('line', {
+        x1: padding.left, x2: width - padding.right, y1: zeroY, y2: zeroY,
+        stroke: cssVar('--text'), strokeWidth: 1, strokeOpacity: 0.4,
+      }) : null,
+      activeIdx !== null ? h('line', {
+        x1: slotCenterX(activeIdx), x2: slotCenterX(activeIdx), y1: padding.top, y2: padding.top + innerH,
+        stroke: cssVar('--muted'), strokeWidth: 1, strokeDasharray: '2 3', opacity: 0.5,
+      }) : null,
+      labels.map(function (label, i) {
+        if (labels.length > 6 && i % Math.ceil(labels.length / 6) !== 0) return null;
+        return h('text', {
+          key: i, x: slotCenterX(i), y: height - 6, fontSize: 9, fill: cssVar('--muted'),
           textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
         }, label);
       })
@@ -1040,6 +1227,43 @@ function SimpleBarChart(props) {
         )
       );
     })
+  );
+}
+
+// Wraps LineChart/TimeSeriesBarChart with a small line/bar toggle button,
+// keeping its own local state — each instance of this component remembers
+// its own choice independently of any other chart on the same screen,
+// since charts aren't meant to all switch together.
+function ToggleableChart(props) {
+  var chartTypeState = useState('line');
+  var chartType = chartTypeState[0], setChartType = chartTypeState[1];
+
+  return h('div', null,
+    h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 6 } },
+      h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2 } },
+        h('button', {
+          onClick: function () { setChartType('line'); },
+          style: {
+            fontSize: 10, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: chartType === 'line' ? 'var(--surface)' : 'transparent',
+            color: chartType === 'line' ? 'var(--text)' : 'var(--muted)',
+            fontWeight: chartType === 'line' ? 600 : 400,
+          },
+        }, 'Line'),
+        h('button', {
+          onClick: function () { setChartType('bar'); },
+          style: {
+            fontSize: 10, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: chartType === 'bar' ? 'var(--surface)' : 'transparent',
+            color: chartType === 'bar' ? 'var(--text)' : 'var(--muted)',
+            fontWeight: chartType === 'bar' ? 600 : 400,
+          },
+        }, 'Bar')
+      )
+    ),
+    chartType === 'line'
+      ? h(LineChart, { series: props.series, colorBySign: props.colorBySign, height: props.height })
+      : h(TimeSeriesBarChart, { series: props.series, colorBySign: props.colorBySign, height: props.height })
   );
 }
 
@@ -1690,20 +1914,20 @@ function TrendsScreen(props) {
   return h('div', { className: 'screen' },
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Spending trend'),
-      h(LineChart, { series: spendingTrend })
+      h(ToggleableChart, { series: spendingTrend })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Income vs. spending'),
       h(ChartLegend, { items: [{ name: 'Income', color: 'var(--gain)' }, { name: 'Spent', color: 'var(--loss)' }] }),
-      h(LineChart, { series: incomeVsExpenses })
+      h(ToggleableChart, { series: incomeVsExpenses })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Balance over time'),
-      h(LineChart, { series: balanceTrend })
+      h(ToggleableChart, { series: balanceTrend, colorBySign: { positive: 'var(--accent2)', negative: 'var(--loss)' } })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Monthly net (income \u2212 spending)'),
-      h(LineChart, { series: monthlyNetTrend })
+      h(ToggleableChart, { series: monthlyNetTrend, colorBySign: { positive: 'var(--gain)', negative: 'var(--loss)' } })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h('p', { className: 'section-title' }, 'Category trend'),
@@ -1722,7 +1946,7 @@ function TrendsScreen(props) {
           }, c);
         })
       ),
-      h(LineChart, { series: categoryTrend })
+      h(ToggleableChart, { series: categoryTrend })
     ),
     h(ScreenFooter)
   );
