@@ -220,9 +220,18 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.17.1';
+var APP_VERSION = '1.18.1';
 
 var CHANGELOG = [
+  { version: '1.18.1', notes: [
+    'Paleta de cores do gr\u00e1fico circular e dos gr\u00e1ficos de linha/barras tornada mais viva e satura, mantendo cada categoria sempre com a mesma cor',
+    'Otimiza\u00e7\u00e3o: removida l\u00f3gica duplicada no c\u00e1lculo dos n\u00fameros do Resumo (Net, Salary, Other income, Spent, Invested), agora partilhada com o c\u00e1lculo usado nas compara\u00f5es de m\u00eas anterior/ano anterior',
+  ]},
+  { version: '1.18.0', notes: [
+    'No Resumo, "Net this month", Salary, Other income, Spent e Invested mostram agora a varia\u00e7\u00e3o em rela\u00e7\u00e3o ao m\u00eas anterior e ao mesmo m\u00eas do ano passado',
+    'Novo interruptor "%" / "\u20ac" para alternar entre ver essa varia\u00e7\u00e3o em percentagem ou em valor absoluto',
+    'Quando n\u00e3o h\u00e1 dados para comparar (m\u00eas anterior ou ano anterior sem transa\u00e7\u00f5es), a compara\u00e7\u00e3o \u00e9 simplesmente omitida em vez de mostrar um valor enganoso',
+  ]},
   { version: '1.17.1', notes: [
     'Revertido o pinch-to-zoom nos gr\u00e1ficos de Tend\u00eancias, introduzido na vers\u00e3o anterior \u2014 estava a causar um erro ao abrir a app em alguns dispositivos. O arrastar com um dedo para ver os valores continua a funcionar normalmente.',
   ]},
@@ -395,6 +404,10 @@ var FAQ_ITEMS = [
     a: 'Sim. Toca na transação, depois em "\ud83d\udcc5 Move to month" e escolhe o mês em que queres que ela seja contabilizada. Isto não altera a data real do banco \u2014 continua a mostrar quando a transação aconteceu de verdade \u2014 só muda em que mês ela conta para os totais, gráficos e filtros. O gráfico "Balance over time" continua a usar sempre a data real, já que reflete o saldo bancário tal como aconteceu.' },
   { q: 'Reimportei um ficheiro com transações sobrepostas e apareceram duplicadas. Porquê?',
     a: 'Isto era um bug real, já corrigido. O identificador interno de cada transação mudou de formato numa versão anterior da app (para resolver outro problema, de transações genuinamente diferentes no mesmo dia a colidirem). Transações guardadas antes dessa mudança ficaram com um identificador num formato antigo, que deixou de coincidir com o identificador gerado ao reimportar o mesmo ficheiro depois da atualização \u2014 por isso eram tratadas como novas em vez de já existentes. A partir desta versão, a app também verifica pela data, valor e descrição da transação, não só pelo identificador, por isso volta a reconhecer corretamente transações já guardadas mesmo que tenham um identificador de uma versão mais antiga. Se já tiveres duplicados de antes desta correção, terás de os remover manualmente \u2014 a app não os apaga automaticamente, para nunca arriscar apagar algo por engano.' },
+  { q: 'O que significam os n\u00fameros pequenos abaixo de Net this month, Salary, etc.?',
+    a: 'Mostram a varia\u00e7\u00e3o desse valor em rela\u00e7\u00e3o ao m\u00eas anterior ("mo.") e ao mesmo m\u00eas do ano passado ("yr."). Usa o interruptor "%" / "\u20ac" no topo do cart\u00e3o para alternar entre ver essa varia\u00e7\u00e3o em percentagem ou em valor absoluto em euros.' },
+  { q: 'Porque \u00e9 que algumas compara\u00e7\u00f5es mostram "New" ou n\u00e3o aparecem nada?',
+    a: '"New" aparece quando o m\u00eas de compara\u00e7\u00e3o tinha 0\u20ac nesse valor (por exemplo, n\u00e3o investiste nada no m\u00eas anterior) \u2014 nesse caso uma percentagem n\u00e3o faz sentido matem\u00e1tico, por isso a app mostra "New" em vez de inventar um n\u00famero. Quando n\u00e3o h\u00e1 nenhuma transa\u00e7\u00e3o nesse m\u00eas de compara\u00e7\u00e3o (por exemplo, ainda n\u00e3o tens dados de h\u00e1 um ano), a compara\u00e7\u00e3o \u00e9 simplesmente omitida.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
     a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
@@ -965,10 +978,10 @@ function cssVar(name) {
 }
 
 var CHART_COLORS = [
-  '#8A4A3C', '#3D5A4A', '#6B5B95', '#C9A66B', '#5B7C99', '#A85751',
-  '#7A8B5C', '#9B6B9E', '#5C8A8A', '#B08968', '#6B7A8F', '#8F6B6B',
-  '#D98E73', '#4F7A6E', '#9C7AB8', '#E0BC8C', '#7AA3C2', '#C77B6E',
-  '#9AB37E', '#B98FC0', '#7BAFAF', '#D4A985', '#8C9BB5', '#B58F8F',
+  '#E0584A', '#2FA66B', '#7B68EE', '#F2B134', '#3B9FE0', '#E0529E',
+  '#5BBA6F', '#C952E0', '#2EC4C4', '#E68A2E', '#5E7CE2', '#D6478C',
+  '#F0716A', '#27AE85', '#9B6FE6', '#F4C04A', '#4FB6E8', '#E673B8',
+  '#7CC576', '#B85AE8', '#3FD1C9', '#EFA64E', '#7E96EE', '#E25C9C',
 ];
 
 // Maps a category name to a color deterministically, so e.g. "Groceries" is
@@ -1746,6 +1759,98 @@ function shortMonthLabel(key) {
 
 // --- Overview screen ------------------------------------------------------
 
+// 'YYYY-MM' -> 'YYYY-MM' for the calendar month immediately before it,
+// correctly rolling over the year boundary (e.g. 2026-01 -> 2025-12).
+function previousMonthKey(mk) {
+  var parts = mk.split('-').map(Number);
+  var y = parts[0], m = parts[1] - 1;
+  if (m < 1) { m = 12; y -= 1; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+
+// 'YYYY-MM' -> the same month one calendar year earlier.
+function sameMonthLastYearKey(mk) {
+  var parts = mk.split('-').map(Number);
+  return (parts[0] - 1) + '-' + String(parts[1]).padStart(2, '0');
+}
+
+// Computes the same five headline figures shown in the Overview summary
+// card, for an arbitrary month key — shared by the active month and by the
+// comparison months (previous month / same month last year), so the
+// month-over-month comparison logic never risks drifting out of sync with
+// how the headline numbers themselves are actually calculated.
+function summaryMetricsForMonth(categorized, mk) {
+  var monthTx = categorized.filter(function (tx) { return tx.effectiveMonthKey === mk; });
+  var salaryIncome = monthTx.filter(function (tx) { return tx.category === 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var totalSpent = monthTx.filter(function (tx) { return isSpending(tx); }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var invested = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var totalIncome = salaryIncome + otherIncome;
+  return {
+    netBalance: totalIncome - totalSpent,
+    salaryIncome: salaryIncome,
+    otherIncome: otherIncome,
+    totalSpent: totalSpent,
+    invested: invested,
+    hasAnyData: monthTx.length > 0,
+  };
+}
+
+// Builds the { absolute, percent, isNew } comparison object for one metric
+// against one comparison month — null when the comparison month has no
+// transactions at all (per the chosen behavior: omit the line rather than
+// imply a 0 → 0 "no change" that isn't actually known).
+function buildComparison(currentValue, comparisonMetrics, key) {
+  if (!comparisonMetrics || !comparisonMetrics.hasAnyData) return null;
+  var previousValue = comparisonMetrics[key];
+  var absolute = currentValue - previousValue;
+  if (previousValue === 0) {
+    // No mathematically meaningful percentage when the base is zero — shown
+    // as "New" rather than an invented +100% or a divide-by-zero artifact,
+    // per the chosen behavior. If current is also 0, there's truly no
+    // change to report at all.
+    if (currentValue === 0) return { absolute: 0, percent: null, isNew: false, isFlat: true };
+    return { absolute: absolute, percent: null, isNew: true, isFlat: false };
+  }
+  var percent = (absolute / Math.abs(previousValue)) * 100;
+  return { absolute: absolute, percent: percent, isNew: false, isFlat: false };
+}
+
+// Renders the small "vs last month / vs same month last year" line shown
+// under each headline figure in the Overview summary card. Returns null
+// (renders nothing) when both comparisons are unavailable, rather than an
+// empty row that would just look like a layout gap.
+function ComparisonRow(props) {
+  var vsMonth = props.vsMonth, vsYear = props.vsYear, mode = props.mode; // mode: 'percent' | 'absolute'
+
+  function formatOne(cmp) {
+    if (!cmp) return null;
+    if (cmp.isFlat) return '\u2014';
+    if (cmp.isNew) return 'New';
+    if (mode === 'percent') {
+      var pct = cmp.percent;
+      return (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
+    }
+    return (cmp.absolute >= 0 ? '+' : '') + formatEUR(cmp.absolute);
+  }
+
+  function colorFor(cmp) {
+    if (!cmp || cmp.isFlat) return 'var(--muted)';
+    if (cmp.isNew) return 'var(--accent2)';
+    var delta = mode === 'percent' ? cmp.percent : cmp.absolute;
+    return delta >= 0 ? 'var(--gain)' : 'var(--loss)';
+  }
+
+  var monthText = formatOne(vsMonth);
+  var yearText = formatOne(vsYear);
+  if (monthText === null && yearText === null) return null;
+
+  return h('div', { style: { display: 'flex', gap: 10, fontSize: 10, marginTop: 2 } },
+    monthText !== null ? h('span', { style: { color: colorFor(vsMonth) } }, monthText + ' mo.') : null,
+    yearText !== null ? h('span', { style: { color: colorFor(vsYear) } }, yearText + ' yr.') : null
+  );
+}
+
 function OverviewScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
   var selectedMonthState = useState(null);
@@ -1754,6 +1859,8 @@ function OverviewScreen(props) {
   var categoryFilter = categoryFilterState[0], setCategoryFilter = categoryFilterState[1];
   var summaryFilterState = useState(null); // null | 'salary' | 'otherIncome' | 'invested' | 'investmentWithdrawals'
   var summaryFilter = summaryFilterState[0], setSummaryFilter = summaryFilterState[1];
+  var comparisonModeState = useState('percent'); // 'percent' | 'absolute'
+  var comparisonMode = comparisonModeState[0], setComparisonMode = comparisonModeState[1];
 
   var activeMonth = selectedMonth || data.months[0];
 
@@ -1862,13 +1969,37 @@ function OverviewScreen(props) {
       .sort(function (a, b) { return b.amount - a.amount; });
   }, [monthTx]);
 
-  var totalSpent = spendingByCategory.reduce(function (sum, c) { return sum + c.amount; }, 0);
-  var salaryIncome = monthTx.filter(function (tx) { return tx.category === 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  // Reuses the exact same calculation summaryMetricsForMonth() applies to the
+  // comparison months, so the active month's headline figures can never
+  // silently drift out of sync with how "last month" / "last year" are
+  // computed — previously these were two separate, hand-duplicated copies
+  // of the same five reduces.
+  var currentMetrics = useMemo(function () {
+    return summaryMetricsForMonth(data.categorized, activeMonth);
+  }, [data.categorized, activeMonth]);
+  var totalSpent = currentMetrics.totalSpent;
+  var salaryIncome = currentMetrics.salaryIncome;
+  var otherIncome = currentMetrics.otherIncome;
   var totalIncome = salaryIncome + otherIncome;
-  var invested = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var invested = currentMetrics.invested;
   var investmentWithdrawals = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var netBalance = totalIncome - totalSpent;
+  var netBalance = currentMetrics.netBalance;
+
+  // Month-over-month and year-over-year comparisons for the five headline
+  // figures above — against whichever prior month/year actually has data;
+  // comparisons are simply omitted (not shown as "no change") when there's
+  // nothing to compare against, per the chosen design.
+  var comparisons = useMemo(function () {
+    var prevMonthMetrics = summaryMetricsForMonth(data.categorized, previousMonthKey(activeMonth));
+    var prevYearMetrics = summaryMetricsForMonth(data.categorized, sameMonthLastYearKey(activeMonth));
+    var keys = ['netBalance', 'salaryIncome', 'otherIncome', 'totalSpent', 'invested'];
+    var result = { vsPrevMonth: {}, vsPrevYear: {} };
+    keys.forEach(function (k) {
+      result.vsPrevMonth[k] = buildComparison(currentMetrics[k], prevMonthMetrics, k);
+      result.vsPrevYear[k] = buildComparison(currentMetrics[k], prevYearMetrics, k);
+    });
+    return result;
+  }, [data.categorized, activeMonth, currentMetrics]);
 
   var balanceChartData = useMemo(function () {
     var bars = [
@@ -1938,52 +2069,89 @@ function OverviewScreen(props) {
 
     // Clean income/spending/savings summary, replacing the old two-number row.
     h('div', { className: 'card', style: { marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 } },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
-        h('span', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Net this month'),
-        h('span', {
-          style: { fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 600, color: netBalance >= 0 ? 'var(--gain)' : 'var(--loss)' },
-        }, (netBalance >= 0 ? '+' : '') + formatEUR(netBalance))
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+        h('div', null,
+          h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 10 } },
+            h('span', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Net this month'),
+          ),
+          h('span', {
+            style: { fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 600, color: netBalance >= 0 ? 'var(--gain)' : 'var(--loss)' },
+          }, (netBalance >= 0 ? '+' : '') + formatEUR(netBalance)),
+          h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.netBalance, vsYear: comparisons.vsPrevYear.netBalance, mode: comparisonMode })
+        ),
+        h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2, flexShrink: 0 } },
+          h('button', {
+            onClick: function () { setComparisonMode('percent'); },
+            style: {
+              fontSize: 10, padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: comparisonMode === 'percent' ? 'var(--surface)' : 'transparent',
+              color: comparisonMode === 'percent' ? 'var(--text)' : 'var(--muted)',
+              fontWeight: comparisonMode === 'percent' ? 600 : 400,
+            },
+          }, '%'),
+          h('button', {
+            onClick: function () { setComparisonMode('absolute'); },
+            style: {
+              fontSize: 10, padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: comparisonMode === 'absolute' ? 'var(--surface)' : 'transparent',
+              color: comparisonMode === 'absolute' ? 'var(--text)' : 'var(--muted)',
+              fontWeight: comparisonMode === 'absolute' ? 600 : 400,
+            },
+          }, '\u20ac')
+        )
       ),
       h('div', { style: { height: 1, background: 'var(--border)' } }),
       h('button', {
         onClick: function () { handleToggleSummaryFilter('salary'); },
         style: {
-          display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13,
+          display: 'flex', flexDirection: 'column', width: '100%', fontSize: 13,
           fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer', textAlign: 'left',
           padding: summaryFilter === 'salary' ? '4px 8px' : '4px 0',
           borderRadius: 8, background: summaryFilter === 'salary' ? 'var(--surface2)' : 'transparent',
         },
       },
-        h('span', { style: { color: 'var(--muted)' } }, 'Salary'),
-        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(salaryIncome))
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
+          h('span', { style: { color: 'var(--muted)' } }, 'Salary'),
+          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(salaryIncome))
+        ),
+        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.salaryIncome, vsYear: comparisons.vsPrevYear.salaryIncome, mode: comparisonMode })
       ),
       h('button', {
         onClick: function () { handleToggleSummaryFilter('otherIncome'); },
         style: {
-          display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13,
+          display: 'flex', flexDirection: 'column', width: '100%', fontSize: 13,
           fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer', textAlign: 'left',
           padding: summaryFilter === 'otherIncome' ? '4px 8px' : '4px 0',
           borderRadius: 8, background: summaryFilter === 'otherIncome' ? 'var(--surface2)' : 'transparent',
         },
       },
-        h('span', { style: { color: 'var(--muted)' } }, 'Other income'),
-        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(otherIncome))
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
+          h('span', { style: { color: 'var(--muted)' } }, 'Other income'),
+          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(otherIncome))
+        ),
+        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.otherIncome, vsYear: comparisons.vsPrevYear.otherIncome, mode: comparisonMode })
       ),
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13 } },
-        h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
-        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } }, formatEUR(totalSpent))
+      h('div', { style: { display: 'flex', flexDirection: 'column', fontSize: 13 } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+          h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
+          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } }, formatEUR(totalSpent))
+        ),
+        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.totalSpent, vsYear: comparisons.vsPrevYear.totalSpent, mode: comparisonMode })
       ),
       h('button', {
         onClick: function () { handleToggleSummaryFilter('invested'); },
         style: {
-          display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: 13,
+          display: 'flex', flexDirection: 'column', width: '100%', fontSize: 13,
           fontFamily: 'var(--sans)', border: 'none', cursor: 'pointer', textAlign: 'left',
           padding: summaryFilter === 'invested' ? '4px 8px' : '4px 0',
           borderRadius: 8, background: summaryFilter === 'invested' ? 'var(--surface2)' : 'transparent',
         },
       },
-        h('span', { style: { color: 'var(--muted)' } }, 'Invested'),
-        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(invested))
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
+          h('span', { style: { color: 'var(--muted)' } }, 'Invested'),
+          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(invested))
+        ),
+        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.invested, vsYear: comparisons.vsPrevYear.invested, mode: comparisonMode })
       ),
       investmentWithdrawals > 0 ? h('button', {
         onClick: function () { handleToggleSummaryFilter('investmentWithdrawals'); },
