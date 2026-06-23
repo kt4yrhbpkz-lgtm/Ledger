@@ -220,9 +220,15 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.20.0';
+var APP_VERSION = '1.21.0';
 
 var CHANGELOG = [
+  { version: '1.21.0', notes: [
+    'Nova barra no Resumo, "Net left this month" \u2014 mostra que percentagem do que ganhaste este m\u00eas ainda n\u00e3o gastaste. Fica negativa se gastares mais do que ganhaste, e mostra 0% nos meses sem rendimento registado',
+  ]},
+  { version: '1.20.1', notes: [
+    'Corrigido: no gr\u00e1fico "Spending pace vs. average", a frase de resumo ("X% ahead/behind") comparava o teu gasto at\u00e9 hoje com a m\u00e9dia do M\u00caS COMPLETO, em vez da m\u00e9dia at\u00e9 ao mesmo ponto do m\u00eas \u2014 o que podia mostrar "behind" mesmo quando a linha vermelha estava visivelmente acima da linha cinzenta no gr\u00e1fico',
+  ]},
   { version: '1.20.0', notes: [
     'Novo gr\u00e1fico no Resumo, "Spending pace vs. average" \u2014 mostra o gasto acumulado dia a dia este m\u00eas comparado com a m\u00e9dia hist\u00f3rica dos \u00faltimos 12 meses, para saberes se est\u00e1s a gastar mais ou menos do que o habitual a esta altura do m\u00eas',
     'Funciona tamb\u00e9m em meses passados, mostrando a curva completa desse m\u00eas em vez de parar "hoje"',
@@ -428,6 +434,8 @@ var FAQ_ITEMS = [
     a: '"New" aparece quando o ponto de compara\u00e7\u00e3o tinha 0\u20ac nesse valor (por exemplo, n\u00e3o investiste nada no m\u00eas anterior) \u2014 nesse caso uma percentagem n\u00e3o faz sentido matem\u00e1tico, por isso a app mostra "New" em vez de inventar um n\u00famero. Quando n\u00e3o h\u00e1 nenhuma transa\u00e7\u00e3o no per\u00edodo de compara\u00e7\u00e3o (por exemplo, ainda n\u00e3o tens dados de h\u00e1 um ano), essa linha \u00e9 simplesmente omitida.' },
   { q: 'O que mostra o gr\u00e1fico "Spending pace vs. average"?',
     a: 'Mostra o teu gasto acumulado dia a dia este m\u00eas (linha vermelha), comparado com a m\u00e9dia do mesmo per\u00edodo nos \u00faltimos 12 meses (linha cinzenta) \u2014 \u00fatil para veres se est\u00e1s a gastar mais r\u00e1pido ou mais devagar do que o habitual a esta altura do m\u00eas. O eixo horizontal \u00e9 a percentagem do m\u00eas j\u00e1 decorrida, n\u00e3o o dia exato, para que meses de tamanhos diferentes (28 a 31 dias) sejam compar\u00e1veis de forma justa. Em meses passados, mostra a curva completa do m\u00eas todo; no m\u00eas atual, para no dia de hoje. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico, usa a m\u00e9dia dos meses que existirem.' },
+  { q: 'O que significa a barra "Net left this month"?',
+    a: 'Mostra que percentagem do que ganhaste este m\u00eas (sal\u00e1rio + outros rendimentos) ainda n\u00e3o gastaste \u2014 calculado como Net this month \u00f7 Total income. Se gastares mais do que ganhaste, a percentagem fica negativa (ex: -20%), mostrando isso mesmo, em vez de simplesmente parar em 0%. Num m\u00eas sem nenhum rendimento registado, a barra mostra 0%.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
     a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
@@ -1944,7 +1952,7 @@ function spendingPaceComparison(categorized, mk, today) {
   return {
     checkpoints: checkpointsSoFar,
     current: checkpointsSoFar.map(function (pct) { return currentCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
-    average: PACE_CHECKPOINTS.map(function (pct) { return avgCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
+    average: checkpointsSoFar.map(function (pct) { return avgCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
     monthsWithData: priorCurves.length,
     elapsedPct: elapsedPct,
   };
@@ -2005,6 +2013,33 @@ function ComparisonRow(props) {
 // fairly). Includes a one-line summary stating whether the person is
 // currently ahead of or behind their typical pace, since the chart alone
 // requires a bit of reading to extract that headline.
+// Horizontal bar showing what percentage of this month's income is still
+// unspent. The fill width is always clamped to a visually sane 0-100% range
+// (a bar can't usefully show -20% or 140% of its own width), but the actual
+// number printed above it is the real, unclamped value — including
+// negative, when spending has exceeded income this month.
+function NetLeftBar(props) {
+  var pct = props.pct;
+  var clampedWidth = Math.max(0, Math.min(100, pct));
+  var color = pct >= 0 ? 'var(--gain)' : 'var(--loss)';
+
+  return h('div', null,
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 } },
+      h('span', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Net left this month'),
+      h('span', { style: { fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: color } },
+        (pct >= 0 ? '' : '\u2212') + Math.abs(pct).toFixed(0) + '%')
+    ),
+    h('div', { style: { height: 12, background: 'var(--surface2)', borderRadius: 7, overflow: 'hidden', position: 'relative' } },
+      h('div', {
+        style: {
+          height: '100%', width: clampedWidth + '%', background: color, borderRadius: 7,
+          transition: 'width 0.5s ease-out',
+        },
+      })
+    )
+  );
+}
+
 function SpendingPaceChart(props) {
   var pace = props.pace;
   if (!pace) return null;
@@ -2169,6 +2204,11 @@ function OverviewScreen(props) {
   var invested = currentMetrics.invested;
   var investmentWithdrawals = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
   var netBalance = currentMetrics.netBalance;
+  // What fraction of this month's income is still unspent — can go negative
+  // if spending exceeded income (shown as the real negative value, not
+  // clamped to 0), and is 0% when there's no income at all this month
+  // (avoids a divide-by-zero rather than implying something was saved).
+  var netLeftPct = totalIncome > 0 ? (netBalance / totalIncome) * 100 : 0;
 
   // Month-over-month, year-over-year, and trailing-12-month-average
   // comparisons for the five headline figures above — against whichever
@@ -2361,6 +2401,10 @@ function OverviewScreen(props) {
         h('span', { style: { color: 'var(--muted)' } }, 'Investment withdrawals'),
         h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(investmentWithdrawals))
       ) : null
+    ),
+
+    h('div', { className: 'card', style: { marginBottom: 24 } },
+      h(NetLeftBar, { pct: netLeftPct })
     ),
 
     spendingPace ? h('div', { className: 'card', style: { marginBottom: 24 } },
