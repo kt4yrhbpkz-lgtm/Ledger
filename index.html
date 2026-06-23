@@ -220,9 +220,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.19.0';
+var APP_VERSION = '1.19.1';
 
 var CHANGELOG = [
+  { version: '1.19.1', notes: [
+    'Em Transactions, o filtro de categoria passa a ser um \u00fanico bot\u00e3o que abre uma lista com scroll para escolher \u2014 tal como "All months" \u2014 em vez de mostrar sempre todas as categorias expandidas',
+  ]},
   { version: '1.19.0', notes: [
     'As compara\u00e7\u00f5es no Resumo passam a estar empilhadas verticalmente, alinhadas \u00e0 direita, com etiqueta clara (vs last month / vs last year / vs 12mo avg)',
     'Nova compara\u00e7\u00e3o face \u00e0 m\u00e9dia dos 12 meses anteriores ao m\u00eas atual (sem incluir o pr\u00f3prio m\u00eas). Se ainda n\u00e3o houver 12 meses de hist\u00f3rico, usa a m\u00e9dia dos meses que existirem',
@@ -2384,6 +2387,8 @@ function TransactionsScreen(props) {
   var monthFilter = monthFilterState[0], setMonthFilter = monthFilterState[1];
   var monthPickerOpenState = useState(false);
   var monthPickerOpen = monthPickerOpenState[0], setMonthPickerOpen = monthPickerOpenState[1];
+  var categoryPickerOpenState = useState(false);
+  var categoryPickerOpen = categoryPickerOpenState[0], setCategoryPickerOpen = categoryPickerOpenState[1];
   var selectModeState = useState(false);
   var selectMode = selectModeState[0], setSelectMode = selectModeState[1];
   var selectedIdsState = useState({}); // { [id]: true }
@@ -2487,27 +2492,12 @@ function TransactionsScreen(props) {
         h('button', {
           className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setMonthPickerOpen(true); },
         }, monthFilter.length === 0 ? '\ud83d\udcc5 All months' : '\ud83d\udcc5 ' + monthFilter.length + ' month' + (monthFilter.length === 1 ? '' : 's')),
+        h('button', {
+          className: 'btn-secondary', style: { fontSize: 11 }, onClick: function () { setCategoryPickerOpen(true); },
+        }, filterCategory ? '\ud83c\udff7\ufe0f ' + filterCategory : '\ud83c\udff7\ufe0f All categories'),
         hasAnyFilter ? h('button', {
           className: 'btn-secondary', style: { fontSize: 11, color: 'var(--loss)' }, onClick: clearAllFilters,
         }, '\u2715 Clear all filters') : null
-      ),
-
-      // Wraps onto as many lines as needed instead of scrolling sideways —
-      // every category is reachable with a tap, no horizontal gesture.
-      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
-        allCategories.map(function (c) {
-          return h('button', {
-            key: c,
-            onClick: function () { setFilterCategory(c === filterCategory ? null : c); },
-            className: 'btn-secondary',
-            style: {
-              fontSize: 11,
-              background: c === filterCategory ? 'var(--text)' : 'var(--surface)',
-              color: c === filterCategory ? 'var(--bg)' : 'var(--text)',
-              borderColor: c === filterCategory ? 'var(--text)' : 'var(--border)',
-            },
-          }, c);
-        })
       )
     ),
 
@@ -2560,6 +2550,12 @@ function TransactionsScreen(props) {
       onClear: function () { setMonthFilter([]); }, onClose: function () { setMonthPickerOpen(false); },
     }) : null,
 
+    categoryPickerOpen ? h(CategoryFilterSheet, {
+      categories: allCategories, selected: filterCategory,
+      onSelect: function (c) { setFilterCategory(c); setCategoryPickerOpen(false); },
+      onClose: function () { setCategoryPickerOpen(false); },
+    }) : null,
+
     bulkCategorizeOpen ? h(Sheet, { title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'), onClose: function () { setBulkCategorizeOpen(false); } },
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
         (props.categories || ALL_CATEGORIES).map(function (c) {
@@ -2601,6 +2597,49 @@ function MonthFilterSheet(props) {
     h('div', { style: { display: 'flex', gap: 8 } },
       h('button', { className: 'btn-secondary', style: { flex: 1 }, onClick: props.onClear }, 'Clear'),
       h('button', { className: 'btn-primary', style: { flex: 1 }, onClick: props.onClose }, 'Done')
+    )
+  );
+}
+
+// Bottom-sheet category picker for the Transactions screen's category
+// filter — a scrollable list instead of a row of chips, since a single tap
+// selects (this filter is single-choice, unlike the month filter above
+// which supports several at once), and there's no need to keep the picker
+// open afterward to pick a second one.
+function CategoryFilterSheet(props) {
+  return h(Sheet, { title: 'Filter by category', onClose: props.onClose },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '60vh', overflowY: 'auto' } },
+      h('div', {
+        onClick: function () { props.onSelect(null); },
+        style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
+      },
+        h('div', {
+          style: {
+            width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+            border: '2px solid ' + (!props.selected ? 'var(--accent)' : 'var(--border)'),
+            background: !props.selected ? 'var(--accent)' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          },
+        }, !props.selected ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+        h('span', { style: { fontSize: 13, color: 'var(--text)', fontWeight: 600 } }, 'All categories')
+      ),
+      props.categories.map(function (c) {
+        var isChecked = props.selected === c;
+        return h('div', {
+          key: c, onClick: function () { props.onSelect(c); },
+          style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
+        },
+          h('div', {
+            style: {
+              width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+              border: '2px solid ' + (isChecked ? 'var(--accent)' : 'var(--border)'),
+              background: isChecked ? 'var(--accent)' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            },
+          }, isChecked ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+          h('span', { style: { fontSize: 13, color: 'var(--text)' } }, c)
+        );
+      })
     )
   );
 }
