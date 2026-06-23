@@ -220,9 +220,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.19.1';
+var APP_VERSION = '1.20.0';
 
 var CHANGELOG = [
+  { version: '1.20.0', notes: [
+    'Novo gr\u00e1fico no Resumo, "Spending pace vs. average" \u2014 mostra o gasto acumulado dia a dia este m\u00eas comparado com a m\u00e9dia hist\u00f3rica dos \u00faltimos 12 meses, para saberes se est\u00e1s a gastar mais ou menos do que o habitual a esta altura do m\u00eas',
+    'Funciona tamb\u00e9m em meses passados, mostrando a curva completa desse m\u00eas em vez de parar "hoje"',
+  ]},
   { version: '1.19.1', notes: [
     'Em Transactions, o filtro de categoria passa a ser um \u00fanico bot\u00e3o que abre uma lista com scroll para escolher \u2014 tal como "All months" \u2014 em vez de mostrar sempre todas as categorias expandidas',
   ]},
@@ -422,6 +426,8 @@ var FAQ_ITEMS = [
     a: 'A m\u00e9dia inclui os 12 meses civis imediatamente antes do m\u00eas que est\u00e1s a ver \u2014 nunca o pr\u00f3prio m\u00eas atual. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico (por exemplo, s\u00f3 tens dados de 4 meses), a app usa a m\u00e9dia desses meses que existirem, em vez de esperar por um ano completo.' },
   { q: 'Porque \u00e9 que algumas compara\u00e7\u00f5es mostram "New" ou n\u00e3o aparecem nada?',
     a: '"New" aparece quando o ponto de compara\u00e7\u00e3o tinha 0\u20ac nesse valor (por exemplo, n\u00e3o investiste nada no m\u00eas anterior) \u2014 nesse caso uma percentagem n\u00e3o faz sentido matem\u00e1tico, por isso a app mostra "New" em vez de inventar um n\u00famero. Quando n\u00e3o h\u00e1 nenhuma transa\u00e7\u00e3o no per\u00edodo de compara\u00e7\u00e3o (por exemplo, ainda n\u00e3o tens dados de h\u00e1 um ano), essa linha \u00e9 simplesmente omitida.' },
+  { q: 'O que mostra o gr\u00e1fico "Spending pace vs. average"?',
+    a: 'Mostra o teu gasto acumulado dia a dia este m\u00eas (linha vermelha), comparado com a m\u00e9dia do mesmo per\u00edodo nos \u00faltimos 12 meses (linha cinzenta) \u2014 \u00fatil para veres se est\u00e1s a gastar mais r\u00e1pido ou mais devagar do que o habitual a esta altura do m\u00eas. O eixo horizontal \u00e9 a percentagem do m\u00eas j\u00e1 decorrida, n\u00e3o o dia exato, para que meses de tamanhos diferentes (28 a 31 dias) sejam compar\u00e1veis de forma justa. Em meses passados, mostra a curva completa do m\u00eas todo; no m\u00eas atual, para no dia de hoje. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico, usa a m\u00e9dia dos meses que existirem.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
     a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
@@ -622,6 +628,14 @@ function formatDateWithYear(iso) {
 
 function monthKey(iso) {
   return iso.slice(0, 7);
+}
+
+// Number of calendar days in a 'YYYY-MM' month — used to normalize "day N"
+// across months of different lengths (28-31 days) into a common 0-100%
+// elapsed-month-fraction scale.
+function daysInMonth(mk) {
+  var parts = mk.split('-').map(Number);
+  return new Date(parts[0], parts[1], 0).getDate();
 }
 
 function monthLabel(key) {
@@ -1854,6 +1868,88 @@ function trailing12MonthAverage(categorized, mk) {
   return averages;
 }
 
+// The 21 elapsed-month-fraction checkpoints (0%, 5%, 10%, ... 100%) used as
+// the common x-axis for comparing spending pace across months of different
+// lengths — a fixed percentage grid rather than raw day numbers, so "40%
+// through the month" means the same thing whether the month has 28 or 31
+// days, per the chosen design.
+var PACE_CHECKPOINTS = Array.from({ length: 21 }, function (_, i) { return i * 5; });
+
+// Builds the cumulative-spending-so-far curve for one calendar month, as a
+// value at each of the 21 checkpoints above. Spending between two
+// checkpoints carries the running total forward (a day with no transactions
+// doesn't reset the cumulative total to zero, it just doesn't add to it).
+function cumulativeSpendingCurve(categorized, mk) {
+  var totalDays = daysInMonth(mk);
+  var byDay = {}; // day-of-month (1-indexed) -> spending that day
+  categorized.forEach(function (tx) {
+    if (tx.effectiveMonthKey !== mk || !isSpending(tx)) return;
+    var day = Number(tx.dateMov.slice(8, 10));
+    byDay[day] = (byDay[day] || 0) + Math.abs(tx.amount);
+  });
+
+  var curve = [];
+  var running = 0;
+  var dayCursor = 1;
+  PACE_CHECKPOINTS.forEach(function (pct) {
+    var dayForThisCheckpoint = Math.round((pct / 100) * totalDays);
+    while (dayCursor <= dayForThisCheckpoint) {
+      running += byDay[dayCursor] || 0;
+      dayCursor += 1;
+    }
+    curve.push(running);
+  });
+  return curve;
+}
+
+// Compares one month's cumulative spending pace, checkpoint by checkpoint,
+// against the average of the same curve across however many of the trailing
+// 12 months actually have data (fewer than 12 if that's all there is yet,
+// same partial-average philosophy as trailing12MonthAverage above). For the
+// real current calendar month, only shows checkpoints up to today (later
+// ones haven't happened yet); for any past month, shows the complete curve
+// through 100%, since the whole month already happened. Returns null when
+// there's no prior month to compare against at all.
+function spendingPaceComparison(categorized, mk, today) {
+  var todayMonthKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+  var isCurrentRealMonth = mk === todayMonthKey;
+  var totalDays = daysInMonth(mk);
+  var elapsedPct = 100;
+  if (isCurrentRealMonth) {
+    var todayDay = Math.min(today.getDate(), totalDays);
+    elapsedPct = (todayDay / totalDays) * 100;
+  }
+  // Only checkpoints up to the elapsed point actually have meaningful data
+  // — for the current month that's "today"; for a past month it's the
+  // whole 0-100% range, since the entire month already happened.
+  var checkpointsSoFar = PACE_CHECKPOINTS.filter(function (pct) { return pct <= elapsedPct; });
+
+  var currentCurve = cumulativeSpendingCurve(categorized, mk);
+
+  var priorCurves = [];
+  var cursor = mk;
+  for (var i = 0; i < 12; i++) {
+    cursor = previousMonthKey(cursor);
+    var metrics = summaryMetricsForMonth(categorized, cursor);
+    if (!metrics.hasAnyData) continue;
+    priorCurves.push(cumulativeSpendingCurve(categorized, cursor));
+  }
+  if (priorCurves.length === 0) return null;
+
+  var avgCurve = PACE_CHECKPOINTS.map(function (pct, idx) {
+    var sum = priorCurves.reduce(function (acc, curve) { return acc + curve[idx]; }, 0);
+    return sum / priorCurves.length;
+  });
+
+  return {
+    checkpoints: checkpointsSoFar,
+    current: checkpointsSoFar.map(function (pct) { return currentCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
+    average: PACE_CHECKPOINTS.map(function (pct) { return avgCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
+    monthsWithData: priorCurves.length,
+    elapsedPct: elapsedPct,
+  };
+}
+
 // Renders the small "vs last month / vs same month last year" line shown
 // under each headline figure in the Overview summary card. Returns null
 // (renders nothing) when both comparisons are unavailable, rather than an
@@ -1900,6 +1996,43 @@ function ComparisonRow(props) {
         h('span', { style: { color: colorFor(r.cmp), fontWeight: 600, minWidth: 30, textAlign: 'right' } }, formatOne(r.cmp))
       );
     })
+  );
+}
+
+// Wraps LineChart to show this month's cumulative spending so far against
+// the average pace of the trailing 12 months, on a shared 0-100%
+// elapsed-month-fraction x-axis (so months of different lengths line up
+// fairly). Includes a one-line summary stating whether the person is
+// currently ahead of or behind their typical pace, since the chart alone
+// requires a bit of reading to extract that headline.
+function SpendingPaceChart(props) {
+  var pace = props.pace;
+  if (!pace) return null;
+
+  var series = [
+    {
+      name: 'This month', color: 'var(--loss)',
+      values: pace.checkpoints.map(function (pct, i) { return { x: pct + '%', y: pace.current[i] }; }),
+    },
+    {
+      name: 'Avg (' + pace.monthsWithData + 'mo)', color: 'var(--muted)',
+      values: pace.checkpoints.map(function (pct, i) { return { x: pct + '%', y: pace.average[i] }; }),
+    },
+  ];
+
+  var latestCurrent = pace.current[pace.current.length - 1];
+  var latestAverage = pace.average[pace.average.length - 1];
+  var diff = latestCurrent - latestAverage;
+  var diffPct = latestAverage > 0 ? (diff / latestAverage) * 100 : null;
+  var isAhead = diff > 0; // spending MORE than usual at this point — the bad direction
+
+  return h('div', null,
+    h(ChartLegend, { items: [{ name: 'This month', color: 'var(--loss)' }, { name: 'Avg (' + pace.monthsWithData + 'mo)', color: 'var(--muted)' }] }),
+    h('p', { style: { fontSize: 12, color: isAhead ? 'var(--loss)' : 'var(--gain)', marginBottom: 10, fontWeight: 600 } },
+      diffPct === null
+        ? (diff === 0 ? 'Right on pace with your average.' : formatEUR(Math.abs(diff)) + (isAhead ? ' ahead of' : ' behind') + ' your average for this point in the month.')
+        : (isAhead ? '+' : '') + diffPct.toFixed(0) + '% ' + (isAhead ? 'ahead of' : 'behind') + ' your average pace for this point in the month.'),
+    h(LineChart, { series: series })
   );
 }
 
@@ -2055,6 +2188,14 @@ function OverviewScreen(props) {
     });
     return result;
   }, [data.categorized, activeMonth, currentMetrics]);
+
+  // Day-by-day cumulative spending pace for the selected month, against the
+  // average pace of the trailing 12 months — lets the person see whether
+  // they're spending faster or slower than usual at this point in the
+  // month, not just whether the final monthly total ended up higher.
+  var spendingPace = useMemo(function () {
+    return spendingPaceComparison(data.categorized, activeMonth, new Date());
+  }, [data.categorized, activeMonth]);
 
   var balanceChartData = useMemo(function () {
     var bars = [
@@ -2221,6 +2362,11 @@ function OverviewScreen(props) {
         h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(investmentWithdrawals))
       ) : null
     ),
+
+    spendingPace ? h('div', { className: 'card', style: { marginBottom: 24 } },
+      h('p', { className: 'section-title' }, 'Spending pace vs. average'),
+      h(SpendingPaceChart, { pace: spendingPace })
+    ) : null,
 
     // Donut + balance comparison chart side by side.
     (spendingByCategory.length > 0 || totalIncome > 0) ? h('div', { className: 'card', style: { marginBottom: 24 } },
