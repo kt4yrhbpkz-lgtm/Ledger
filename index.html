@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.25.4';
+var APP_VERSION = '1.25.5';
 
 var CHANGELOG = [
+  { version: '1.25.5', notes: [
+    '"Other income" deixa de mostrar a comparação com o mês anterior/ano anterior/média, e fica oculto sempre que for 0€ nesse mês',
+  ]},
   { version: '1.25.4', notes: [
     'Corrigida a mensagem ao importar um ficheiro: o número de duplicados detetados por formato antigo de identificador deixa de aparecer somado de forma confusa ao total — agora mostra claramente que é um subconjunto ("Of those, X foram...")',
     'Corrigido: o gráfico "Spending pace vs. average" não tinha em conta reembolsos, mostrando o gasto bruto em vez do líquido — agora fica consistente com o resto da app',
@@ -2774,7 +2777,7 @@ function OverviewScreen(props) {
         ),
         h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.salaryIncome, vsYear: comparisons.vsPrevYear.salaryIncome, vsTrailingAvg: comparisons.vsTrailingAvg.salaryIncome, mode: comparisonMode })
       ),
-      h('button', {
+      otherIncome > 0 ? h('button', {
         onClick: function () { handleToggleSummaryFilter('otherIncome'); },
         style: {
           display: 'flex', flexDirection: 'column', width: '100%', fontSize: 13,
@@ -2786,9 +2789,8 @@ function OverviewScreen(props) {
         h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Other income'),
           h(Money, { amount: otherIncome, style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } })
-        ),
-        h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.otherIncome, vsYear: comparisons.vsPrevYear.otherIncome, vsTrailingAvg: comparisons.vsTrailingAvg.otherIncome, mode: comparisonMode })
-      ),
+        )
+      ) : null,
       h('div', { style: { display: 'flex', flexDirection: 'column', fontSize: 13 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
