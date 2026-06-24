@@ -232,9 +232,15 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.22.0';
+var APP_VERSION = '1.22.2';
 
 var CHANGELOG = [
+  { version: '1.22.2', notes: [
+    'Corrigido: o valor central do gráfico circular e os valores do eixo Y nos gráficos de Tendências não ficavam desfocados no modo privado em alguns navegadores (a técnica de desfoque usada não funciona de forma fiável em texto SVG, especialmente no Safari/iOS) — agora usam um método diferente que desfoca corretamente em qualquer navegador',
+  ]},
+  { version: '1.22.1', notes: [
+    'Definições mostra agora "Data up to: ..." (a transação mais recente que tens guardada) e "Last upload: ..." (quando importaste um ficheiro pela última vez), logo abaixo do botão de importar',
+  ]},
   { version: '1.22.0', notes: [
     'Novo modo privado \u2014 toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios (mant\u00e9m a forma vis\u00edvel, sem revelar os n\u00fameros), \u00fatil para mostrares a app a outra pessoa sem expor os teus dados',
     'A prefer\u00eancia do modo privado fica guardada neste dispositivo, mas n\u00e3o \u00e9 inclu\u00edda em backups \u2014 \u00e9 uma prefer\u00eancia de ecr\u00e3, n\u00e3o um dado financeiro',
@@ -452,6 +458,8 @@ var FAQ_ITEMS = [
     a: 'Mostra o teu gasto acumulado dia a dia este m\u00eas (linha vermelha), comparado com a m\u00e9dia do mesmo per\u00edodo nos \u00faltimos 12 meses (linha cinzenta) \u2014 \u00fatil para veres se est\u00e1s a gastar mais r\u00e1pido ou mais devagar do que o habitual a esta altura do m\u00eas. O eixo horizontal \u00e9 a percentagem do m\u00eas j\u00e1 decorrida, n\u00e3o o dia exato, para que meses de tamanhos diferentes (28 a 31 dias) sejam compar\u00e1veis de forma justa. Em meses passados, mostra a curva completa do m\u00eas todo; no m\u00eas atual, para no dia de hoje. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico, usa a m\u00e9dia dos meses que existirem.' },
   { q: 'O que significa a barra "Net left this month"?',
     a: 'Mostra que percentagem do que ganhaste este m\u00eas (sal\u00e1rio + outros rendimentos) ainda n\u00e3o gastaste \u2014 calculado como Net this month \u00f7 Total income. Se gastares mais do que ganhaste, a percentagem fica negativa (ex: -20%), mostrando isso mesmo, em vez de simplesmente parar em 0%. Num m\u00eas sem nenhum rendimento registado, a barra mostra 0%.' },
+  { q: 'Como sei até que data tenho dados importados?',
+    a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
   { q: 'Como funciona o modo privado?',
     a: 'Toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios da app \u2014 totais, transa\u00e7\u00f5es, gr\u00e1ficos \u2014 mantendo a forma vis\u00edvel para a app continuar a parecer normal, mas sem ningu\u00e9m conseguir ler os n\u00fameros reais por cima do teu ombro. Toca de novo para mostrar os valores. A prefer\u00eancia fica guardada neste dispositivo, mas n\u00e3o viaja com backups \u2014 ao restaurar um backup noutro telemóvel, o modo privado mant\u00e9m-se como estava nesse aparelho.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
@@ -679,6 +687,24 @@ function formatDateWithYear(iso) {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Formats a full ISO timestamp (date + time, e.g. the moment a CSV was last
+// uploaded) into something more immediately readable than a raw date —
+// "Today at 14:32", "Yesterday at 09:15", or a full date for anything
+// older, since "how recently" matters more than the exact calendar date
+// once it's more than a day or two ago.
+function formatUploadTimestamp(isoString) {
+  var d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  var now = new Date();
+  var startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var startOfThat = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var dayDiff = Math.round((startOfToday - startOfThat) / 86400000);
+  var timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (dayDiff === 0) return 'Today at ' + timeStr;
+  if (dayDiff === 1) return 'Yesterday at ' + timeStr;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' at ' + timeStr;
+}
+
 function monthKey(iso) {
   return iso.slice(0, 7);
 }
@@ -725,6 +751,7 @@ var NOTES_KEY = 'ledger:notes';
 var MERCHANT_RULES_KEY = 'ledger:merchant-rules';
 var MONTH_OVERRIDES_KEY = 'ledger:month-overrides';
 var PRIVACY_MODE_KEY = 'ledger:privacy-mode';
+var LAST_UPLOAD_KEY = 'ledger:last-upload-at';
 
 function loadStoredTransactions() {
   try {
@@ -835,6 +862,22 @@ function loadPrivacyMode() {
 
 function savePrivacyMode(enabled) {
   localStorage.setItem(PRIVACY_MODE_KEY, enabled ? 'true' : 'false');
+}
+
+// When a CSV was last successfully uploaded — updates on every successful
+// upload attempt, even one that adds zero new transactions (everything
+// already saved), since the point is literally "when did I last try to
+// bring my data up to date," not "when did new data last show up."
+function loadLastUploadAt() {
+  try {
+    return localStorage.getItem(LAST_UPLOAD_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveLastUploadAt(isoString) {
+  localStorage.setItem(LAST_UPLOAD_KEY, isoString);
 }
 
 function downloadJSON(filename, data) {
@@ -1160,7 +1203,8 @@ function LineChart(props) {
 
   var gridLines = [0, 0.5, 1].map(function (frac) {
     var val = minVal + (maxVal - minVal) * frac;
-    return { y: yPos(val), label: formatEUR(val) };
+    var y = yPos(val);
+    return { y: y, yPercent: (y / height) * 100, label: formatEUR(val) };
   });
 
   // Only drawn when the data actually straddles zero — a fixed reference
@@ -1266,10 +1310,7 @@ function LineChart(props) {
         })
       ),
       gridLines.map(function (gl, i) {
-        return h('g', { key: i },
-          h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
-          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', style: isPrivacyModeOn ? { filter: 'blur(4px)' } : null }, gl.label)
-        );
+        return h('line', { key: i, x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' });
       }),
       showZeroLine ? h('line', {
         x1: padding.left, x2: width - padding.right, y1: zeroY, y2: zeroY,
@@ -1307,7 +1348,24 @@ function LineChart(props) {
           textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
         }, label);
       })
-    )
+    ),
+    // Gridline value labels are an HTML overlay rather than SVG <text> — see
+    // the comment on DonutChart's amount overlay above for why: CSS
+    // filter:blur() needed for privacy mode doesn't reliably affect SVG text
+    // across browsers, but does on a plain positioned HTML element. Position
+    // is expressed as a percentage of the SVG's own height so it stays
+    // correctly aligned regardless of how the SVG itself gets scaled by its
+    // width:100% CSS.
+    gridLines.map(function (gl, i) {
+      return h('div', {
+        key: i,
+        className: isPrivacyModeOn ? 'privacy-blur' : '',
+        style: {
+          position: 'absolute', left: 0, top: gl.yPercent + '%', transform: 'translateY(-50%)',
+          fontSize: 9, color: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', pointerEvents: 'none',
+        },
+      }, gl.label);
+    })
   );
 }
 
@@ -1342,7 +1400,8 @@ function TimeSeriesBarChart(props) {
 
   var gridLines = [0, 0.5, 1].map(function (frac) {
     var val = minVal + (maxVal - minVal) * frac;
-    return { y: yPos(val), label: formatEUR(val) };
+    var y = yPos(val);
+    return { y: y, yPercent: (y / height) * 100, label: formatEUR(val) };
   });
 
   var zeroY = yPos(0);
@@ -1410,10 +1469,7 @@ function TimeSeriesBarChart(props) {
     ) : null,
     h('svg', { viewBox: '0 0 ' + width + ' ' + height, style: { width: '100%', height: height, display: 'block', overflow: 'visible' } },
       gridLines.map(function (gl, i) {
-        return h('g', { key: i },
-          h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
-          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', style: isPrivacyModeOn ? { filter: 'blur(4px)' } : null }, gl.label)
-        );
+        return h('line', { key: i, x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' });
       }),
       labels.map(function (label, i) {
         return series.map(function (s, si) {
@@ -1446,7 +1502,19 @@ function TimeSeriesBarChart(props) {
           textAnchor: 'middle', fontFamily: 'IBM Plex Mono, monospace',
         }, label);
       })
-    )
+    ),
+    // Same HTML-overlay approach as LineChart above — see that component's
+    // comment for why SVG <text> can't reliably be blurred via CSS.
+    gridLines.map(function (gl, i) {
+      return h('div', {
+        key: i,
+        className: isPrivacyModeOn ? 'privacy-blur' : '',
+        style: {
+          position: 'absolute', left: 0, top: gl.yPercent + '%', transform: 'translateY(-50%)',
+          fontSize: 9, color: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', pointerEvents: 'none',
+        },
+      }, gl.label);
+    })
   );
 }
 
@@ -1572,7 +1640,7 @@ function DonutChart(props) {
   }
 
   return h('div', null,
-    h('div', { style: { display: 'flex', justifyContent: 'center', marginBottom: 24 } },
+    h('div', { style: { position: 'relative', display: 'flex', justifyContent: 'center', marginBottom: 24 } },
       h('svg', {
         viewBox: '0 0 ' + size + ' ' + size,
         style: { width: size, height: size, flexShrink: 0, filter: 'drop-shadow(0 6px 16px rgba(' + cssVar('--shadow-rgb') + ', 0.18))' },
@@ -1594,12 +1662,21 @@ function DonutChart(props) {
         h('text', {
           x: cx, y: cy - 5, textAnchor: 'middle', fontSize: 11, fill: cssVar('--muted'),
           fontFamily: 'IBM Plex Mono, monospace',
-        }, activeCategory ? activeCategory : 'total'),
-        h('text', {
-          x: cx, y: cy + 16, textAnchor: 'middle', fontSize: 16, fill: cssVar('--text'), fontWeight: 600,
-          fontFamily: 'Source Serif 4, Georgia, serif',
-          style: isPrivacyModeOn ? { filter: 'blur(6px)' } : null,
-        }, formatEUR(activeCategory ? (data.find(function (d) { return d.category === activeCategory; }) || {}).amount || 0 : total))
+        }, activeCategory ? activeCategory : 'total')
+      ),
+      // The amount is rendered as an HTML overlay rather than SVG <text> —
+      // the CSS filter:blur() needed for privacy mode doesn't reliably apply
+      // to SVG text across browsers (notably Safari/iOS), even though React
+      // happily sets the style attribute either way. A plain absolutely-
+      // positioned HTML div blurs correctly everywhere.
+      h('div', {
+        style: {
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, calc(-50% + 11px))',
+          fontSize: 16, fontWeight: 600, color: cssVar('--text'), fontFamily: 'Source Serif 4, Georgia, serif',
+          pointerEvents: 'none',
+        },
+      },
+        h(Money, { amount: activeCategory ? (data.find(function (d) { return d.category === activeCategory; }) || {}).amount || 0 : total })
       )
     ),
     h('div', null,
@@ -3111,6 +3188,16 @@ function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
 
+  // The most recent real transaction date across everything stored — answers
+  // "up to what date do I actually have data," distinct from the upload
+  // timestamp below (which answers "when did I last try to import").
+  var latestTransactionDate = useMemo(function () {
+    if (props.transactions.length === 0) return null;
+    var latest = props.transactions[0].dateMov;
+    props.transactions.forEach(function (tx) { if (tx.dateMov > latest) latest = tx.dateMov; });
+    return latest;
+  }, [props.transactions]);
+
   var handleBulkAssign = useCallback(function (fragment, category) {
     // The central onCategoryChange handler already tags every transaction
     // sharing the same merchant fragment, so finding one matching transaction
@@ -3125,6 +3212,10 @@ function SettingsScreen(props) {
     h('p', { className: 'section-title' }, 'Import data'),
     h('div', { className: 'card', style: { marginBottom: 20 } },
       h(UploadBox, { onFile: props.onAddFile, compact: true }),
+      latestTransactionDate ? h('p', { style: { fontSize: 12, color: 'var(--muted)', marginTop: 8 } },
+        'Data up to: ' + formatDateWithYear(latestTransactionDate)) : null,
+      props.lastUploadAt ? h('p', { style: { fontSize: 12, color: 'var(--muted)', marginTop: 4 } },
+        'Last upload: ' + formatUploadTimestamp(props.lastUploadAt)) : null,
       props.status ? h('p', { style: { fontSize: 12, color: 'var(--muted)', marginTop: 8 } }, props.status) : null,
       props.error ? h('p', { style: { fontSize: 12, color: 'var(--loss)', marginTop: 8 } }, props.error) : null
     ),
@@ -3212,6 +3303,9 @@ function App() {
   // pattern already used for CHART_COLORS etc.) rather than needing this
   // threaded down as a prop through every intermediate screen/component.
   isPrivacyModeOn = privacyMode;
+
+  var lastUploadAtState = useState(function () { return loadLastUploadAt(); });
+  var lastUploadAt = lastUploadAtState[0], setLastUploadAt = lastUploadAtState[1];
 
   var faqOpenState = useState(false);
   var faqOpen = faqOpenState[0], setFaqOpen = faqOpenState[1];
@@ -3338,6 +3432,15 @@ function App() {
       setError('No transactions found in this file. Make sure you uploaded the Caixadirecta export unchanged.');
       return;
     }
+    // Recorded here — right after the file is confirmed to be a valid,
+    // non-empty CGD export — so a genuinely broken upload (wrong file,
+    // unparseable) doesn't count as a successful "last upload," but every
+    // valid attempt does, even one that turns out to add zero new
+    // transactions because everything in it was already saved.
+    var uploadTimestamp = new Date().toISOString();
+    saveLastUploadAt(uploadTimestamp);
+    setLastUploadAt(uploadTimestamp);
+
     var existing = loadStoredTransactions();
     var before = Object.keys(existing).length;
 
@@ -3565,7 +3668,7 @@ function App() {
     onAddFile: handleFile, status: status, error: error, categories: allCategoriesCombined, onCreateCategory: handleCreateCategory,
     notes: notes, onSetNote: handleSetNote, merchantRules: merchantRules,
     monthOverrides: monthOverrides, onSetMonthOverride: handleSetMonthOverride,
-    onApplyCategoryToSelection: handleApplyCategoryToSelection,
+    onApplyCategoryToSelection: handleApplyCategoryToSelection, lastUploadAt: lastUploadAt,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
