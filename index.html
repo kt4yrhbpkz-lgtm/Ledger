@@ -177,6 +177,18 @@ button { font-family: var(--sans); }
 }
 .scroll-top-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
+/* Money amounts get this class whenever privacy mode is on — blurred
+   enough that the shape/length of the number is still visible (so the
+   layout doesn't look broken) but the actual digits aren't readable over
+   someone's shoulder. user-select:none stops a screenshot+zoom or a
+   text-select from defeating the blur. */
+.privacy-blur {
+  filter: blur(6px);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: filter 0.2s;
+}
+
 @keyframes donutGrow {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -220,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.21.0';
+var APP_VERSION = '1.22.0';
 
 var CHANGELOG = [
+  { version: '1.22.0', notes: [
+    'Novo modo privado \u2014 toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios (mant\u00e9m a forma vis\u00edvel, sem revelar os n\u00fameros), \u00fatil para mostrares a app a outra pessoa sem expor os teus dados',
+    'A prefer\u00eancia do modo privado fica guardada neste dispositivo, mas n\u00e3o \u00e9 inclu\u00edda em backups \u2014 \u00e9 uma prefer\u00eancia de ecr\u00e3, n\u00e3o um dado financeiro',
+  ]},
   { version: '1.21.0', notes: [
     'Nova barra no Resumo, "Net left this month" \u2014 mostra que percentagem do que ganhaste este m\u00eas ainda n\u00e3o gastaste. Fica negativa se gastares mais do que ganhaste, e mostra 0% nos meses sem rendimento registado',
   ]},
@@ -436,6 +452,8 @@ var FAQ_ITEMS = [
     a: 'Mostra o teu gasto acumulado dia a dia este m\u00eas (linha vermelha), comparado com a m\u00e9dia do mesmo per\u00edodo nos \u00faltimos 12 meses (linha cinzenta) \u2014 \u00fatil para veres se est\u00e1s a gastar mais r\u00e1pido ou mais devagar do que o habitual a esta altura do m\u00eas. O eixo horizontal \u00e9 a percentagem do m\u00eas j\u00e1 decorrida, n\u00e3o o dia exato, para que meses de tamanhos diferentes (28 a 31 dias) sejam compar\u00e1veis de forma justa. Em meses passados, mostra a curva completa do m\u00eas todo; no m\u00eas atual, para no dia de hoje. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico, usa a m\u00e9dia dos meses que existirem.' },
   { q: 'O que significa a barra "Net left this month"?',
     a: 'Mostra que percentagem do que ganhaste este m\u00eas (sal\u00e1rio + outros rendimentos) ainda n\u00e3o gastaste \u2014 calculado como Net this month \u00f7 Total income. Se gastares mais do que ganhaste, a percentagem fica negativa (ex: -20%), mostrando isso mesmo, em vez de simplesmente parar em 0%. Num m\u00eas sem nenhum rendimento registado, a barra mostra 0%.' },
+  { q: 'Como funciona o modo privado?',
+    a: 'Toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios da app \u2014 totais, transa\u00e7\u00f5es, gr\u00e1ficos \u2014 mantendo a forma vis\u00edvel para a app continuar a parecer normal, mas sem ningu\u00e9m conseguir ler os n\u00fameros reais por cima do teu ombro. Toca de novo para mostrar os valores. A prefer\u00eancia fica guardada neste dispositivo, mas n\u00e3o viaja com backups \u2014 ao restaurar um backup noutro telemóvel, o modo privado mant\u00e9m-se como estava nesse aparelho.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
     a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
@@ -618,6 +636,33 @@ function formatEUR(amount) {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(amount);
 }
 
+// Module-level flag, kept in sync by App whenever privacy mode is toggled.
+// Used the same way other module-level constants (CHART_COLORS, ALL_CATEGORIES)
+// are already read throughout this file, without needing to thread a prop
+// through every intermediate component between App and wherever a money
+// value happens to be rendered.
+var isPrivacyModeOn = false;
+
+// Wraps any rendered money text in a span that gets blurred when privacy
+// mode is on. Use this for straightforward "just show the formatted amount"
+// cases; for spots that build a larger string by concatenating a sign or
+// label with formatEUR(...), wrap the whole containing element in
+// privacyClassName() below instead, since blurring only half of a
+// concatenated string isn't possible without first splitting it apart.
+function Money(props) {
+  var blurClass = isPrivacyModeOn ? 'privacy-blur' : '';
+  var className = (props.className ? props.className + ' ' : '') + blurClass;
+  return h('span', { className: className, style: props.style }, formatEUR(props.amount));
+}
+
+// Returns the blur class name when privacy mode is on, '' otherwise — for
+// merging into an element's existing className when that element's text
+// content is a concatenated string rather than a clean formatEUR(...) call
+// that Money above could wrap directly.
+function privacyClassName() {
+  return isPrivacyModeOn ? 'privacy-blur' : '';
+}
+
 function formatDate(iso) {
   var parts = iso.split('-').map(Number);
   var y = parts[0], m = parts[1], d = parts[2];
@@ -679,6 +724,7 @@ var CUSTOM_CATEGORIES_KEY = 'ledger:custom-categories';
 var NOTES_KEY = 'ledger:notes';
 var MERCHANT_RULES_KEY = 'ledger:merchant-rules';
 var MONTH_OVERRIDES_KEY = 'ledger:month-overrides';
+var PRIVACY_MODE_KEY = 'ledger:privacy-mode';
 
 function loadStoredTransactions() {
   try {
@@ -773,6 +819,22 @@ function loadMonthOverrides() {
 
 function saveMonthOverrides(overrides) {
   localStorage.setItem(MONTH_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// Whether money amounts are currently blurred — a device-local display
+// preference, not part of the financial data itself, so deliberately not
+// included in backup/restore (no reason a backup file should dictate
+// whether numbers are visible when restored on a different device).
+function loadPrivacyMode() {
+  try {
+    return localStorage.getItem(PRIVACY_MODE_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function savePrivacyMode(enabled) {
+  localStorage.setItem(PRIVACY_MODE_KEY, enabled ? 'true' : 'false');
 }
 
 function downloadJSON(filename, data) {
@@ -901,7 +963,7 @@ function TransactionRow(props) {
           tx.category + (tx.isOverride ? ' \u00b7  edited' : ''))
       ),
       h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", textAlign: 'right', color: isPositive ? 'var(--gain)' : 'var(--loss)' } },
-        (isPositive ? '+' : '') + formatEUR(tx.amount))
+        isPositive ? '+' : '', h(Money, { amount: tx.amount }))
     ),
     note && !editingNote ? h('div', {
       onClick: openNoteEditor,
@@ -1190,7 +1252,7 @@ function LineChart(props) {
         var dotColor = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: dotColor, display: 'inline-block', flexShrink: 0 } }),
-          (sd.name ? sd.name + ': ' : '') + formatEUR(val)
+          sd.name ? sd.name + ': ' : '', h(Money, { amount: val })
         );
       })
     ) : null,
@@ -1206,7 +1268,7 @@ function LineChart(props) {
       gridLines.map(function (gl, i) {
         return h('g', { key: i },
           h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
-          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', style: isPrivacyModeOn ? { filter: 'blur(4px)' } : null }, gl.label)
         );
       }),
       showZeroLine ? h('line', {
@@ -1342,7 +1404,7 @@ function TimeSeriesBarChart(props) {
         var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: color, display: 'inline-block', flexShrink: 0 } }),
-          (s.name ? s.name + ': ' : '') + formatEUR(val)
+          s.name ? s.name + ': ' : '', h(Money, { amount: val })
         );
       })
     ) : null,
@@ -1350,7 +1412,7 @@ function TimeSeriesBarChart(props) {
       gridLines.map(function (gl, i) {
         return h('g', { key: i },
           h('line', { x1: padding.left, x2: width - padding.right, y1: gl.y, y2: gl.y, stroke: cssVar('--border'), strokeWidth: 1, strokeDasharray: '3 4' }),
-          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace' }, gl.label)
+          h('text', { x: 0, y: gl.y + 3, fontSize: 9, fill: cssVar('--muted'), fontFamily: 'IBM Plex Mono, monospace', style: isPrivacyModeOn ? { filter: 'blur(4px)' } : null }, gl.label)
         );
       }),
       labels.map(function (label, i) {
@@ -1398,7 +1460,7 @@ function SimpleBarChart(props) {
       return h('div', { key: i },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 } },
           h('span', { style: { color: 'var(--muted)' } }, d.label),
-          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 600 } }, formatEUR(d.value))
+          h(Money, { amount: d.value, className: 'money-span', style: { fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 600 } })
         ),
         h('div', { style: { height: 10, background: 'var(--surface2)', borderRadius: 6, overflow: 'hidden' } },
           h('div', {
@@ -1536,6 +1598,7 @@ function DonutChart(props) {
         h('text', {
           x: cx, y: cy + 16, textAnchor: 'middle', fontSize: 16, fill: cssVar('--text'), fontWeight: 600,
           fontFamily: 'Source Serif 4, Georgia, serif',
+          style: isPrivacyModeOn ? { filter: 'blur(6px)' } : null,
         }, formatEUR(activeCategory ? (data.find(function (d) { return d.category === activeCategory; }) || {}).amount || 0 : total))
       )
     ),
@@ -1553,7 +1616,7 @@ function DonutChart(props) {
         },
           h('span', { style: { width: 8, height: 8, borderRadius: 4, background: s.color, display: 'inline-block', flexShrink: 0 } }),
           h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.category),
-          h('span', { style: { fontFamily: 'IBM Plex Mono, monospace', color: 'var(--muted)' } }, formatEUR(s.amount))
+          h(Money, { amount: s.amount, style: { fontFamily: 'IBM Plex Mono, monospace', color: 'var(--muted)' } })
         );
       })
     )
@@ -1634,7 +1697,7 @@ function BulkCategoryConfirmModal(props) {
     h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 4, lineHeight: 1.5 } },
       'This will set ', h('strong', null, pending.affected.length + ' transaction' + (pending.affected.length === 1 ? '' : 's')),
       ' matching "', pending.fragment, '" to ', h('strong', null, pending.category), '.'),
-    h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 16 } }, 'Total: ' + formatEUR(total)),
+    h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 16 } }, 'Total: ', h(Money, { amount: total })),
     h('div', { style: { maxHeight: 280, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 12 } },
       sortedAffected.map(function (tx, i) {
         var isTrigger = tx.id === pending.triggerId;
@@ -1650,7 +1713,7 @@ function BulkCategoryConfirmModal(props) {
           h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
             tx.description, isTrigger ? h('span', { style: { color: 'var(--accent)', fontSize: 11 } }, ' \u2014 this one') : null),
           h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
-            (tx.amount < 0 ? '' : '+') + formatEUR(tx.amount))
+            tx.amount < 0 ? '' : '+', h(Money, { amount: tx.amount }))
         );
       })
     ),
@@ -2001,7 +2064,10 @@ function ComparisonRow(props) {
     rows.map(function (r, i) {
       return h('div', { key: i, style: { display: 'flex', gap: 5, alignItems: 'baseline', fontSize: 10 } },
         h('span', { style: { color: 'var(--muted)' } }, r.label),
-        h('span', { style: { color: colorFor(r.cmp), fontWeight: 600, minWidth: 30, textAlign: 'right' } }, formatOne(r.cmp))
+        h('span', {
+          className: (mode === 'absolute' && isPrivacyModeOn) ? 'privacy-blur' : '',
+          style: { color: colorFor(r.cmp), fontWeight: 600, minWidth: 30, textAlign: 'right' },
+        }, formatOne(r.cmp))
       );
     })
   );
@@ -2063,7 +2129,10 @@ function SpendingPaceChart(props) {
 
   return h('div', null,
     h(ChartLegend, { items: [{ name: 'This month', color: 'var(--loss)' }, { name: 'Avg (' + pace.monthsWithData + 'mo)', color: 'var(--muted)' }] }),
-    h('p', { style: { fontSize: 12, color: isAhead ? 'var(--loss)' : 'var(--gain)', marginBottom: 10, fontWeight: 600 } },
+    h('p', {
+      className: (diffPct === null && diff !== 0 && isPrivacyModeOn) ? 'privacy-blur' : '',
+      style: { fontSize: 12, color: isAhead ? 'var(--loss)' : 'var(--gain)', marginBottom: 10, fontWeight: 600 },
+    },
       diffPct === null
         ? (diff === 0 ? 'Right on pace with your average.' : formatEUR(Math.abs(diff)) + (isAhead ? ' ahead of' : ' behind') + ' your average for this point in the month.')
         : (isAhead ? '+' : '') + diffPct.toFixed(0) + '% ' + (isAhead ? 'ahead of' : 'behind') + ' your average pace for this point in the month.'),
@@ -2312,7 +2381,7 @@ function OverviewScreen(props) {
           ),
           h('span', {
             style: { fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 600, color: netBalance >= 0 ? 'var(--gain)' : 'var(--loss)' },
-          }, (netBalance >= 0 ? '+' : '') + formatEUR(netBalance)),
+          }, netBalance >= 0 ? '+' : '', h(Money, { amount: netBalance })),
           h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.netBalance, vsYear: comparisons.vsPrevYear.netBalance, vsTrailingAvg: comparisons.vsTrailingAvg.netBalance, mode: comparisonMode })
         ),
         h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2, flexShrink: 0 } },
@@ -2348,7 +2417,7 @@ function OverviewScreen(props) {
       },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Salary'),
-          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(salaryIncome))
+          h(Money, { amount: salaryIncome, style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } })
         ),
         h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.salaryIncome, vsYear: comparisons.vsPrevYear.salaryIncome, vsTrailingAvg: comparisons.vsTrailingAvg.salaryIncome, mode: comparisonMode })
       ),
@@ -2363,14 +2432,14 @@ function OverviewScreen(props) {
       },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Other income'),
-          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } }, formatEUR(otherIncome))
+          h(Money, { amount: otherIncome, style: { fontFamily: 'var(--mono)', color: 'var(--gain)' } })
         ),
         h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.otherIncome, vsYear: comparisons.vsPrevYear.otherIncome, vsTrailingAvg: comparisons.vsTrailingAvg.otherIncome, mode: comparisonMode })
       ),
       h('div', { style: { display: 'flex', flexDirection: 'column', fontSize: 13 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Spent'),
-          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } }, formatEUR(totalSpent))
+          h(Money, { amount: totalSpent, style: { fontFamily: 'var(--mono)', color: 'var(--loss)' } })
         ),
         h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.totalSpent, vsYear: comparisons.vsPrevYear.totalSpent, vsTrailingAvg: comparisons.vsTrailingAvg.totalSpent, mode: comparisonMode, invertColor: true })
       ),
@@ -2385,7 +2454,7 @@ function OverviewScreen(props) {
       },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%' } },
           h('span', { style: { color: 'var(--muted)' } }, 'Invested'),
-          h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(invested))
+          h(Money, { amount: invested, style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } })
         ),
         h(ComparisonRow, { vsMonth: comparisons.vsPrevMonth.invested, vsYear: comparisons.vsPrevYear.invested, vsTrailingAvg: comparisons.vsTrailingAvg.invested, mode: comparisonMode })
       ),
@@ -2399,7 +2468,7 @@ function OverviewScreen(props) {
         },
       },
         h('span', { style: { color: 'var(--muted)' } }, 'Investment withdrawals'),
-        h('span', { style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } }, formatEUR(investmentWithdrawals))
+        h(Money, { amount: investmentWithdrawals, style: { fontFamily: 'var(--mono)', color: 'var(--accent2)' } })
       ) : null
     ),
 
@@ -2711,7 +2780,7 @@ function TransactionsScreen(props) {
                 h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
                 h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' } }, tx.description),
                 h('span', { style: { fontFamily: 'var(--mono)', textAlign: 'right', color: tx.amount > 0 ? 'var(--gain)' : 'var(--loss)' } },
-                  (tx.amount > 0 ? '+' : '') + formatEUR(tx.amount))
+                  tx.amount > 0 ? '+' : '', h(Money, { amount: tx.amount }))
               )
             );
           }
@@ -2952,7 +3021,7 @@ function ReviewUncategorized(props) {
               h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment),
               h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, g.count + ' transaction' + (g.count === 1 ? '' : 's'))
             ),
-            h('span', { style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } }, formatEUR(g.total))
+            h(Money, { amount: g.total, style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } })
           )
         );
       }
@@ -2965,7 +3034,7 @@ function ReviewUncategorized(props) {
             h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment),
             h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, g.count + ' transaction' + (g.count === 1 ? '' : 's'))
           ),
-          h('span', { style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } }, formatEUR(g.total))
+          h(Money, { amount: g.total, style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } })
         ),
         isOpen ? h('div', { style: { marginTop: 10 } },
           h('div', { style: { border: '1px solid var(--border)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' } },
@@ -2980,7 +3049,7 @@ function ReviewUncategorized(props) {
                 h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDateWithYear(tx.dateMov)),
                 h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
                 h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
-                  (tx.amount < 0 ? '' : '+') + formatEUR(tx.amount))
+                  tx.amount < 0 ? '' : '+', h(Money, { amount: tx.amount }))
               );
             })
           ),
@@ -3136,6 +3205,14 @@ function App() {
   var screen = screenState[0], setScreen = screenState[1];
   var themeState = useState(function () { return getStoredTheme(); });
   var theme = themeState[0], setTheme = themeState[1];
+  var privacyModeState = useState(function () { return loadPrivacyMode(); });
+  var privacyMode = privacyModeState[0], setPrivacyMode = privacyModeState[1];
+  // Keep the module-level flag in sync on every render, BEFORE any child
+  // component reads it — children read isPrivacyModeOn directly (the same
+  // pattern already used for CHART_COLORS etc.) rather than needing this
+  // threaded down as a prop through every intermediate screen/component.
+  isPrivacyModeOn = privacyMode;
+
   var faqOpenState = useState(false);
   var faqOpen = faqOpenState[0], setFaqOpen = faqOpenState[1];
   var versionOpenState = useState(false);
@@ -3238,6 +3315,14 @@ function App() {
   var handleThemeChange = useCallback(function (t) {
     setTheme(t);
     setStoredTheme(t);
+  }, []);
+
+  var handlePrivacyToggle = useCallback(function () {
+    setPrivacyMode(function (prev) {
+      var next = !prev;
+      savePrivacyMode(next);
+      return next;
+    });
   }, []);
 
   var handleFile = useCallback(function (text) {
@@ -3505,6 +3590,10 @@ function App() {
         h('div', { className: 'wordmark' }, 'Ledger'),
         h('div', { className: 'wordmark-sub' }, transactions.length + ' transactions saved')
       ),
+      h('button', {
+        className: 'icon-btn', 'aria-label': privacyMode ? 'Show amounts' : 'Hide amounts',
+        onClick: handlePrivacyToggle,
+      }, privacyMode ? '\ud83d\udc41\ufe0f\u200d\ud83d\udde8\ufe0f' : '\ud83d\udc41\ufe0f'),
       h('button', { className: 'icon-btn', onClick: function () { setFaqOpen(true); } }, '\ud83d\udca1'),
       h('button', { className: 'icon-btn', onClick: function () { handleThemeChange(theme === 'dark' ? 'light' : 'dark'); } },
         theme === 'dark' ? '\u2600\ufe0f' : '\ud83c\udf19')
