@@ -232,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.25.5';
+var APP_VERSION = '1.25.6';
 
 var CHANGELOG = [
+  { version: '1.25.6', notes: [
+    'As categorias passam a aparecer sempre por ordem alfabética em qualquer lista de categorização da app',
+    'Corrigido um bug real: ao categorizar em massa (Resumo, Transactions, ou Categorize merchants), a última categoria da lista podia ficar inacessível, abaixo do ecrã — causado por um scroll aninhado dentro da folha que o iOS nem sempre consegue repassar corretamente. Removido o scroll duplicado nessas listas.',
+  ]},
   { version: '1.25.5', notes: [
     '"Other income" deixa de mostrar a comparação com o mês anterior/ano anterior/média, e fica oculto sempre que for 0€ nesse mês',
   ]},
@@ -649,7 +653,8 @@ var NON_SPENDING_CATEGORIES = ['Investments'];
 
 var ALL_CATEGORIES = RULES.map(function (r) { return r.category; })
   .filter(function (c, i, arr) { return arr.indexOf(c) === i; })
-  .concat(['Salary', 'Other']);
+  .concat(['Salary', 'Other'])
+  .sort(function (a, b) { return a.localeCompare(b); });
 
 // Strips CGD's generic prefixes/trailing codes so similar truncated merchant
 // strings (e.g. "COMPRAS C.DEB TROPICA") group together by their actual
@@ -3299,7 +3304,14 @@ function CategoryPickerSheet(props) {
         border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
       },
     }, '+ New category') : null),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '55vh', overflowY: 'auto' } },
+    // Deliberately NOT a separate scrollable div with its own maxHeight —
+    // a second, nested overflow:auto container inside .sheet-body (which
+    // is already the correctly flex-sized scroll area for the whole sheet)
+    // caused mobile browsers to mishandle the touch gesture, trapping the
+    // last item(s) below the visibly-scrollable region with no way to
+    // reach them. The category list now scrolls as part of the SAME
+    // scroll container as the header button above it.
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
       props.categories.map(function (c) {
         return h('button', {
           key: c, onClick: function () { props.onSelect(c); },
@@ -3349,7 +3361,12 @@ function MonthFilterSheet(props) {
 // open afterward to pick a second one.
 function CategoryFilterSheet(props) {
   return h(Sheet, { title: 'Filter by category', onClose: props.onClose },
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '60vh', overflowY: 'auto' } },
+    // No trailing buttons below this list (unlike MonthFilterSheet's
+    // Clear/Done), so — same reasoning as CategoryPickerSheet above —
+    // there's no need for a separate nested scroll container with its own
+    // maxHeight. Letting .sheet-body be the only scroll area avoids the
+    // nested-scroll conflict that could trap the last item off-screen.
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
       h('div', {
         onClick: function () { props.onSelect(null); },
         style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
@@ -4173,7 +4190,12 @@ function App() {
         if (combined.indexOf(c) === -1) combined.push(c);
       });
     }
-    return combined;
+    // Sorted alphabetically — every categorize UI in the app (the per-
+    // transaction picker, both bulk pickers, Categorize merchants) reads
+    // from this single combined list, so sorting it once here is enough
+    // to keep all of them consistent rather than sorting separately in
+    // each render spot.
+    return combined.slice().sort(function (a, b) { return a.localeCompare(b); });
   }, [customCategories, housingRule]);
 
   var handleCreateCategory = useCallback(function (name) {
