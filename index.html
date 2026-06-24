@@ -147,7 +147,7 @@ button { font-family: var(--sans); }
 .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
 .sheet { position: relative; width: 100%; background: var(--surface); border-radius: 24px 24px 0 0; max-height: 82vh; display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); box-shadow: 0 -8px 30px rgba(0,0,0,0.15); }
 .sheet-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-.sheet-body { overflow-y: auto; padding: 14px 20px; flex: 1; }
+.sheet-body { overflow-y: auto; padding: 14px 20px; flex: 1; min-height: 0; }
 
 .faq-q { width: 100%; text-align: left; background: none; border: none; padding: 14px 2px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; font-family: var(--sans); border-bottom: 1px solid var(--border); }
 .faq-a { padding: 0 2px 14px; font-size: 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
@@ -232,9 +232,29 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.22.2';
+var APP_VERSION = '1.24.1';
 
 var CHANGELOG = [
+  { version: '1.24.1', notes: [
+    'Auditoria de c\u00f3digo: removida l\u00f3gica duplicada no c\u00e1lculo de "Other income" (agora centralizada numa \u00fanica fun\u00e7\u00e3o, evitando que os dois sítios pudessem divergir no futuro)',
+    'Otimiza\u00e7\u00e3o: o gr\u00e1fico "Category trend" em Tend\u00eancias passa a percorrer as transa\u00e7\u00f5es uma \u00fanica vez em vez de uma vez por m\u00eas, mais r\u00e1pido com hist\u00f3ricos longos',
+    'Teste de regress\u00e3o completo (41 verifica\u00e7\u00f5es) confirmando todas as funcionalidades principais sem reescrever comportamento existente',
+  ]},
+  { version: '1.24.0', notes: [
+    'Nova regra autom\u00e1tica em Defini\u00e7\u00f5es: "Housing transfer rule" \u2014 divide automaticamente as transfer\u00eancias para o mesmo destinat\u00e1rio em Rent, Credit Card Payment e Utilities, com base no valor de cada uma, m\u00eas a m\u00eas',
+    'Os limites de valor (Utilities, Credit Card, Rent) ficam ajust\u00e1veis em Defini\u00e7\u00f5es, sem precisar de pedir ajuda \u2014 \u00fatil quando a renda aumentar',
+    'Transfer\u00eancias acima do limite de Rent, ou uma segunda transfer\u00eancia na faixa de Rent no mesmo m\u00eas, ficam sem categoria para revisares manualmente em "Categorize merchants"',
+    'Este padr\u00e3o de destinat\u00e1rio fica exclu\u00eddo do "Apply to all" em massa, para nunca se correr o risco de aplicar a mesma categoria a todas as transfer\u00eancias de uma vez \u2014 podes continuar a corrigir cada transa\u00e7\u00e3o individualmente',
+  ]},
+  { version: '1.23.0', notes: [
+    'Novo botão "↻" junto à faixa de meses no Resumo, para voltar rapidamente ao mês atual depois de navegares para meses antigos',
+    'O filtro do gráfico circular (e o filtro de categoria/rendimento) deixa de reiniciar quando navegas entre meses — mantém-se ativo enquanto fazes scroll',
+    'Nova lógica de reembolsos: uma transação positiva categorizada manualmente (ou por regra) numa categoria de despesa normal (ex: Trips & Holidays) passa a REDUZIR o gasto líquido dessa categoria, em vez de contar como "Other income" — útil quando alguém te devolve parte do que pagaste numa viagem ou despesa partilhada. Mantém "Net this month" e os totais sempre consistentes.',
+  ]},
+  { version: '1.22.3', notes: [
+    'Corrigido: ao categorizar várias transações/comerciantes de uma vez, não era possível fazer scroll até ao fim da lista de categorias nem criar uma categoria nova — corrigido um bug de CSS que impedia o scroll, e adicionado o botão "+ New category" a ambos os ecrãs de categorização em massa',
+    'Corrigido um bug real: ao selecionar vários comerciantes (cada um com mais de uma transação) e tocar em "Categorize", só era processado o último comerciante da lista — os restantes ficavam sem categoria aplicada. Agora aplica corretamente a todos os selecionados.',
+  ]},
   { version: '1.22.2', notes: [
     'Corrigido: o valor central do gráfico circular e os valores do eixo Y nos gráficos de Tendências não ficavam desfocados no modo privado em alguns navegadores (a técnica de desfoque usada não funciona de forma fiável em texto SVG, especialmente no Safari/iOS) — agora usam um método diferente que desfoca corretamente em qualquer navegador',
   ]},
@@ -460,6 +480,10 @@ var FAQ_ITEMS = [
     a: 'Mostra que percentagem do que ganhaste este m\u00eas (sal\u00e1rio + outros rendimentos) ainda n\u00e3o gastaste \u2014 calculado como Net this month \u00f7 Total income. Se gastares mais do que ganhaste, a percentagem fica negativa (ex: -20%), mostrando isso mesmo, em vez de simplesmente parar em 0%. Num m\u00eas sem nenhum rendimento registado, a barra mostra 0%.' },
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
+  { q: 'Como funciona a "Housing transfer rule"?',
+    a: 'Em Defini\u00e7\u00f5es, ativa esta regra para dividir automaticamente as transfer\u00eancias para a mesma pessoa (ex: o teu companheiro/a de casa) em tr\u00eas categorias, com base no valor: a maior do m\u00eas (entre o limite de Credit Card e o de Rent) fica Rent; valores m\u00e9dios ficam Credit Card Payment; valores pequenos ficam Utilities. Se houver uma transfer\u00eancia acima do limite de Rent, ou uma segunda na faixa de Rent no mesmo m\u00eas, fica sem categoria para revisares em "Categorize merchants" \u2014 nunca \u00e9 adivinhada automaticamente. Os limites (100\u20ac, 500\u20ac, 600\u20ac por defeito) podem ser ajustados em Defini\u00e7\u00f5es. Este destinat\u00e1rio fica exclu\u00eddo do "Apply to all" em massa, j\u00e1 que uma \u00fanica categoria para todas as transfer\u00eancias anularia o prop\u00f3sito da regra \u2014 corrige cada transa\u00e7\u00e3o individualmente se precisares.' },
+  { q: 'Como funciono os reembolsos de despesas partilhadas?',
+    a: 'Se pagaste algo (ex: uma viagem, categorizada como Trips & Holidays) e depois alguém te devolveu parte do dinheiro, categoriza essa transação de devolução com a MESMA categoria da despesa original (em vez de a deixar como rendimento genérico). A categoria passa a mostrar o valor líquido — o que a viagem realmente te custou, já descontado o que recebeste de volta — e esse valor deixa de contar também como "Other income", para nunca seres contabilizado duas vezes. Isto aplica-se a qualquer categoria de despesa, não só viagens. Se o reembolso cobrir o gasto todo, a categoria desaparece do gráfico circular nesse mês, já que não sobra nada para mostrar.' },
   { q: 'Como funciona o modo privado?',
     a: 'Toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios da app \u2014 totais, transa\u00e7\u00f5es, gr\u00e1ficos \u2014 mantendo a forma vis\u00edvel para a app continuar a parecer normal, mas sem ningu\u00e9m conseguir ler os n\u00fameros reais por cima do teu ombro. Toca de novo para mostrar os valores. A prefer\u00eancia fica guardada neste dispositivo, mas n\u00e3o viaja com backups \u2014 ao restaurar um backup noutro telemóvel, o modo privado mant\u00e9m-se como estava nesse aparelho.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
@@ -638,6 +662,37 @@ function isSpending(tx) {
   return tx.amount < 0 && NON_SPENDING_CATEGORIES.indexOf(tx.category) === -1;
 }
 
+// Categories where a positive transaction can never represent "money coming
+// back for something I paid for" — Salary and Investments already have
+// their own dedicated handling elsewhere, and the transfer-mechanism
+// categories (Income / Transfers In, Transfers (P2P), Transfer Out) describe
+// HOW money moved, not WHAT it was for, so there's no specific expense for a
+// credit in one of these categories to net against.
+var NON_REIMBURSABLE_CATEGORIES = ['Salary', 'Investments', 'Income / Transfers In', 'Transfers (P2P)', 'Transfer Out'];
+
+// A reimbursement is a positive transaction whose final category is an
+// ordinary expense category (Restaurants, Trips & Holidays, a custom
+// category, etc.) — e.g. a friend paying back their share of a trip you
+// covered. Recognizing it lets that category's net total reflect what the
+// trip actually cost YOU, not the full amount you initially paid before
+// being paid back. Applies regardless of how the category was assigned —
+// a manual override, a standing merchant rule, or any other mechanism —
+// since what matters is the category the transaction has ended up in, not
+// the path that got it there.
+function isReimbursement(tx) {
+  return tx.amount > 0 && NON_REIMBURSABLE_CATEGORIES.indexOf(tx.category) === -1;
+}
+
+// A transaction counts toward "Other income" only if it's a credit that
+// isn't Salary, isn't an Investments move, and isn't a reimbursement (which
+// nets against its own expense category instead — see isReimbursement
+// above). Centralizing this avoids the condition drifting out of sync
+// between the headline otherIncome figure and the "Other income" filter
+// used when tapping that figure to see the underlying transactions.
+function isOtherIncome(tx) {
+  return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments' && !isReimbursement(tx);
+}
+
 // --- Formatting ------------------------------------------------------
 
 function formatEUR(amount) {
@@ -752,6 +807,7 @@ var MERCHANT_RULES_KEY = 'ledger:merchant-rules';
 var MONTH_OVERRIDES_KEY = 'ledger:month-overrides';
 var PRIVACY_MODE_KEY = 'ledger:privacy-mode';
 var LAST_UPLOAD_KEY = 'ledger:last-upload-at';
+var HOUSING_RULE_KEY = 'ledger:housing-transfer-rule';
 
 function loadStoredTransactions() {
   try {
@@ -878,6 +934,105 @@ function loadLastUploadAt() {
 
 function saveLastUploadAt(isoString) {
   localStorage.setItem(LAST_UPLOAD_KEY, isoString);
+}
+
+// Configurable thresholds for the per-month housing-transfer classification
+// rule below. Pre-filled with the bands confirmed for this person's actual
+// rent/utilities/credit-card arrangement, but adjustable in Settings since
+// rent in particular is expected to rise over time without needing to ask
+// for code changes each time.
+var DEFAULT_HOUSING_RULE = {
+  enabled: true,
+  pattern: 'Trf Mbway 914XXX162',
+  utilitiesMax: 100,    // < this -> Utilities
+  creditCardMax: 500,   // >= utilitiesMax and < this -> Credit Card Payment
+  rentMax: 600,         // >= creditCardMax and <= this -> Rent (first one per month only)
+                         // > rentMax -> left uncategorized always
+};
+
+function loadHousingRule() {
+  try {
+    var raw = localStorage.getItem(HOUSING_RULE_KEY);
+    if (!raw) return DEFAULT_HOUSING_RULE;
+    return Object.assign({}, DEFAULT_HOUSING_RULE, JSON.parse(raw));
+  } catch (e) {
+    return DEFAULT_HOUSING_RULE;
+  }
+}
+
+function saveHousingRule(rule) {
+  localStorage.setItem(HOUSING_RULE_KEY, JSON.stringify(rule));
+}
+
+// Builds a regex from the configured pattern string. CGD masks the middle
+// digits of an Mbway recipient's phone number with literal capital "X"
+// characters in every export (e.g. "Trf Mbway 914XXX162") — that's literal
+// text the bank writes, not a stand-in for "any digit" — so the pattern is
+// matched as exact text (case-insensitively, since CGD's casing varies
+// between "Trf"/"TRF" across exports) rather than treating X as a digit
+// wildcard.
+function housingRulePatternRegex(rule) {
+  var escaped = rule.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+}
+
+// Classifies every transaction matching the configured recipient pattern
+// into Rent / Credit Card Payment / Utilities based on amount, applying the
+// "only the first 500-600 transfer per month can be Rent" rule that the
+// generic per-transaction autoCategory() rules can't express on their own
+// (it depends on what ELSE happened that same month, not just the
+// transaction in isolation). Takes the already-categorized array (with
+// manual overrides already resolved) and ONLY touches transactions that
+// don't already have a category from a higher-priority source — a manual
+// override on one specific transaction always wins and is never touched
+// here, by construction, since this runs as a fallback after overrides are
+// already applied elsewhere.
+function applyHousingTransferRule(categorized, rule) {
+  if (!rule || !rule.enabled) return categorized;
+  var regex = housingRulePatternRegex(rule);
+  var byMonth = {};
+  categorized.forEach(function (tx) {
+    if (tx.amount >= 0 || !regex.test(tx.description)) return;
+    var mk = tx.effectiveMonthKey;
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(tx);
+  });
+
+  // 'Other' here is a deliberate choice, not a fallback default — it's what
+  // makes these residual cases (over the Rent limit, or a second same-month
+  // rent-range transfer) show up in Categorize merchants for manual review,
+  // the same way any other genuinely-unclassified transaction would, rather
+  // than silently reverting to the old blanket "Housing" auto-rule where
+  // they'd be invisible among everything else already correctly split out.
+  var classification = {};
+  Object.keys(byMonth).forEach(function (mk) {
+    var monthTx = byMonth[mk].slice().sort(function (a, b) { return a.dateMov < b.dateMov ? -1 : 1; });
+    var rentAssignedThisMonth = false;
+    monthTx.forEach(function (tx) {
+      var amt = Math.abs(tx.amount);
+      if (amt > rule.rentMax) {
+        classification[tx.id] = 'Other';
+        return;
+      }
+      if (amt >= rule.creditCardMax) {
+        if (!rentAssignedThisMonth) {
+          classification[tx.id] = 'Rent';
+          rentAssignedThisMonth = true;
+        } else {
+          // A second rent-band transfer this month — also surfaced for
+          // review rather than silently left as Housing.
+          classification[tx.id] = 'Other';
+        }
+        return;
+      }
+      classification[tx.id] = amt >= rule.utilitiesMax ? 'Credit Card Payment' : 'Utilities';
+    });
+  });
+
+  return categorized.map(function (tx) {
+    if (tx.isOverride || !(tx.id in classification)) return tx;
+    return Object.assign({}, tx, { category: classification[tx.id] });
+  });
 }
 
 function downloadJSON(filename, data) {
@@ -1838,8 +1993,8 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides, merchantRules, monthOverrides) {
-  var categorized = useMemo(function () {
+function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule) {
+  var baseCategorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       var monthOverride = monthOverrides ? monthOverrides[tx.id] : null;
@@ -1855,6 +2010,15 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides) {
       });
     });
   }, [transactions, overrides, merchantRules, monthOverrides]);
+
+  // A second pass, separate from the per-transaction logic above, since this
+  // rule needs to see every transaction in a month before it can decide any
+  // one of them (which one is "the" rent transfer depends on what else
+  // happened that month) — something autoCategory()'s one-transaction-at-a-
+  // time design can't express.
+  var categorized = useMemo(function () {
+    return applyHousingTransferRule(baseCategorized, housingRule);
+  }, [baseCategorized, housingRule]);
 
   var months = useMemo(function () {
     var set = {};
@@ -1881,6 +2045,12 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides) {
         else byMonth[mk].investmentWithdrawals += tx.amount;
       } else if (isSpending(tx)) {
         byMonth[mk].spent += Math.abs(tx.amount);
+      } else if (isReimbursement(tx)) {
+        // Same netting as summaryMetricsForMonth/spendingByCategory — money
+        // coming back for an expense already paid reduces "spent" here too,
+        // so Trends' Income vs. Spending and Monthly Net charts stay
+        // consistent with what Overview shows for the same month.
+        byMonth[mk].spent -= tx.amount;
       } else if (tx.amount > 0) {
         byMonth[mk].income += tx.amount;
       }
@@ -1958,8 +2128,17 @@ function sameMonthLastYearKey(mk) {
 function summaryMetricsForMonth(categorized, mk) {
   var monthTx = categorized.filter(function (tx) { return tx.effectiveMonthKey === mk; });
   var salaryIncome = monthTx.filter(function (tx) { return tx.category === 'Salary'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var otherIncome = monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
-  var totalSpent = monthTx.filter(function (tx) { return isSpending(tx); }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  // Reimbursements are excluded here — they're money coming back for an
+  // expense already paid, not new income, so counting them in otherIncome
+  // on top of netting them against totalSpent below would double-count the
+  // same euros in two different places.
+  var otherIncome = monthTx.filter(isOtherIncome).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  // Spending net of reimbursements: a positive transaction categorized into
+  // an ordinary expense category reduces what that category (and the
+  // overall total) actually cost, rather than appearing as unrelated income.
+  var grossSpent = monthTx.filter(function (tx) { return isSpending(tx); }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
+  var reimbursements = monthTx.filter(function (tx) { return isReimbursement(tx); }).reduce(function (sum, tx) { return sum + tx.amount; }, 0);
+  var totalSpent = grossSpent - reimbursements;
   var invested = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; }).reduce(function (sum, tx) { return sum + Math.abs(tx.amount); }, 0);
   var totalIncome = salaryIncome + otherIncome;
   return {
@@ -2218,7 +2397,7 @@ function SpendingPaceChart(props) {
 }
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
   var selectedMonthState = useState(null);
   var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
   var categoryFilterState = useState(null);
@@ -2230,13 +2409,15 @@ function OverviewScreen(props) {
 
   var activeMonth = selectedMonth || data.months[0];
 
-  // Changing month while a category filter is active would otherwise show a
-  // filter label for a category that might not even exist in the new month —
-  // clearer to just reset it when the month changes.
+  // Deliberately does NOT clear categoryFilter/summaryFilter when the month
+  // changes — a filter chosen while browsing one month is meant to follow
+  // the person as they swipe/tap through others, the same way it would on
+  // any filtered list view. If the active category doesn't exist in the new
+  // month, visibleTx and the donut/list below it simply render empty for
+  // that filter, which is a clearer signal than silently resetting the
+  // person's choice without telling them.
   var handleSelectMonth = useCallback(function (m) {
     setSelectedMonth(m);
-    setCategoryFilter(null);
-    setSummaryFilter(null);
   }, []);
 
   // data.months is sorted newest-first, so "swipe left" (go forward in time,
@@ -2329,8 +2510,14 @@ function OverviewScreen(props) {
     var totals = {};
     monthTx.forEach(function (tx) {
       if (isSpending(tx)) totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amount);
+      else if (isReimbursement(tx)) totals[tx.category] = (totals[tx.category] || 0) - tx.amount;
     });
+    // A category can end up at or below zero once reimbursements are netted
+    // in (e.g. the only spending in "Trips & Holidays" this month was fully
+    // paid back) — those are dropped from the donut/list rather than shown
+    // as a zero or negative slice, since there's nothing left to visualize.
     return Object.keys(totals)
+      .filter(function (category) { return totals[category] > 0; })
       .map(function (category) { return { category: category, amount: totals[category] }; })
       .sort(function (a, b) { return b.amount - a.amount; });
   }, [monthTx]);
@@ -2407,7 +2594,7 @@ function OverviewScreen(props) {
 
   var visibleTx = useMemo(function () {
     if (summaryFilter === 'salary') return monthTx.filter(function (tx) { return tx.category === 'Salary'; });
-    if (summaryFilter === 'otherIncome') return monthTx.filter(function (tx) { return tx.amount > 0 && tx.category !== 'Salary' && tx.category !== 'Investments'; });
+    if (summaryFilter === 'otherIncome') return monthTx.filter(isOtherIncome);
     if (summaryFilter === 'invested') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; });
     if (summaryFilter === 'investmentWithdrawals') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; });
     if (categoryFilter) return monthTx.filter(function (tx) { return tx.category === categoryFilter; });
@@ -2426,27 +2613,39 @@ function OverviewScreen(props) {
 
   return h('div', { className: 'screen', ref: swipeRef },
     h('div', {
-      ref: monthStripRef,
       style: {
-        display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 4,
+        display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20,
         position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg)', paddingTop: 4, marginTop: -4,
-        WebkitOverflowScrolling: 'touch',
       },
     },
-      data.months.map(function (m) {
-        return h('button', {
-          key: m,
-          'data-month': m,
-          onClick: function () { handleSelectMonth(m); },
-          className: 'btn-secondary',
-          style: {
-            flexShrink: 0, fontFamily: 'var(--mono)',
-            background: m === activeMonth ? 'var(--text)' : 'var(--surface)',
-            color: m === activeMonth ? 'var(--bg)' : 'var(--text)',
-            borderColor: m === activeMonth ? 'var(--text)' : 'var(--border)',
-          },
-        }, monthLabel(m));
-      })
+      h('div', {
+        ref: monthStripRef,
+        style: {
+          display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, flex: 1,
+          WebkitOverflowScrolling: 'touch',
+        },
+      },
+        data.months.map(function (m) {
+          return h('button', {
+            key: m,
+            'data-month': m,
+            onClick: function () { handleSelectMonth(m); },
+            className: 'btn-secondary',
+            style: {
+              flexShrink: 0, fontFamily: 'var(--mono)',
+              background: m === activeMonth ? 'var(--text)' : 'var(--surface)',
+              color: m === activeMonth ? 'var(--bg)' : 'var(--text)',
+              borderColor: m === activeMonth ? 'var(--text)' : 'var(--border)',
+            },
+          }, monthLabel(m));
+        })
+      ),
+      activeMonth !== data.months[0] ? h('button', {
+        onClick: function () { handleSelectMonth(null); },
+        className: 'btn-secondary',
+        style: { flexShrink: 0, fontSize: 11, padding: '8px 10px', marginBottom: 4 },
+        'aria-label': 'Back to current month',
+      }, '\u21bb') : null
     ),
 
     // Clean income/spending/savings summary, replacing the old two-number row.
@@ -2588,7 +2787,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
@@ -2632,16 +2831,25 @@ function TrendsScreen(props) {
     // isSpending() — a salary total should reflect every matching
     // transaction that month, not be zeroed out because it's a credit.
     var isSpecialCategory = activeTrendCategory === 'Salary' || activeTrendCategory === 'Investments';
+    // A single pass over every transaction, bucketed by month, rather than
+    // re-scanning the full transaction list once per month — the previous
+    // version was O(months × transactions); this is O(transactions).
+    var sumsByMonth = {};
+    data.categorized.forEach(function (tx) {
+      if (tx.category !== activeTrendCategory) return;
+      var mk = tx.effectiveMonthKey;
+      if (sumsByMonth[mk] === undefined) sumsByMonth[mk] = 0;
+      if (isSpecialCategory) sumsByMonth[mk] += Math.abs(tx.amount);
+      else if (isSpending(tx)) sumsByMonth[mk] += Math.abs(tx.amount);
+      else if (isReimbursement(tx)) sumsByMonth[mk] -= tx.amount;
+    });
     return [{
       name: activeTrendCategory, color: colorForCategory(activeTrendCategory),
       values: data.monthsAscending.map(function (mk) {
-        var sum = 0;
-        data.categorized.forEach(function (tx) {
-          if (tx.effectiveMonthKey !== mk || tx.category !== activeTrendCategory) return;
-          if (isSpecialCategory) sum += Math.abs(tx.amount);
-          else if (isSpending(tx)) sum += Math.abs(tx.amount);
-        });
-        return { x: shortMonthLabel(mk), y: sum };
+        // Matches the donut chart's behavior: a category fully offset by
+        // reimbursements that month shows as 0 here rather than a
+        // negative trend value, which wouldn't mean anything visually.
+        return { x: shortMonthLabel(mk), y: Math.max(0, sumsByMonth[mk] || 0) };
       }),
     }];
   }, [data.monthsAscending, data.categorized, activeTrendCategory]);
@@ -2714,7 +2922,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
   var filterCategoryState = useState(null);
   var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
   var searchTextState = useState('');
@@ -2731,6 +2939,10 @@ function TransactionsScreen(props) {
   var selectedIds = selectedIdsState[0], setSelectedIds = selectedIdsState[1];
   var bulkCategorizeOpenState = useState(false);
   var bulkCategorizeOpen = bulkCategorizeOpenState[0], setBulkCategorizeOpen = bulkCategorizeOpenState[1];
+  var bulkCreatingState = useState(false);
+  var bulkCreating = bulkCreatingState[0], setBulkCreating = bulkCreatingState[1];
+  var bulkNewNameState = useState('');
+  var bulkNewName = bulkNewNameState[0], setBulkNewName = bulkNewNameState[1];
 
   var filtered = useMemo(function () {
     var q = searchText.trim().toLowerCase();
@@ -2786,8 +2998,16 @@ function TransactionsScreen(props) {
   function handleBulkCategorize(category) {
     if (props.onApplyCategoryToSelection) props.onApplyCategoryToSelection(Object.keys(selectedIds), category);
     setBulkCategorizeOpen(false);
+    setBulkCreating(false);
+    setBulkNewName('');
     setSelectMode(false);
     setSelectedIds({});
+  }
+
+  function handleCreateAndBulkCategorize() {
+    if (!props.onCreateCategory) return;
+    var created = props.onCreateCategory(bulkNewName);
+    if (created) handleBulkCategorize(created);
   }
 
   if (props.transactions.length === 0) {
@@ -2892,14 +3112,38 @@ function TransactionsScreen(props) {
       onClose: function () { setCategoryPickerOpen(false); },
     }) : null,
 
-    bulkCategorizeOpen ? h(Sheet, { title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'), onClose: function () { setBulkCategorizeOpen(false); } },
+    bulkCategorizeOpen ? h(Sheet, {
+      title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
+      onClose: function () { setBulkCategorizeOpen(false); setBulkCreating(false); setBulkNewName(''); },
+    },
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
         (props.categories || ALL_CATEGORIES).map(function (c) {
           return h('button', {
             key: c, onClick: function () { handleBulkCategorize(c); }, className: 'btn-secondary', style: { fontSize: 12 },
           }, c);
-        })
-      )
+        }),
+        props.onCreateCategory ? h('button', {
+          onClick: function () { setBulkCreating(true); },
+          style: {
+            fontSize: 12, padding: '8px 14px', borderRadius: 8,
+            border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+          },
+        }, '+ New category') : null
+      ),
+      bulkCreating ? h('div', { style: { marginTop: 10, display: 'flex', gap: 6 } },
+        h('input', {
+          type: 'text', value: bulkNewName, autoFocus: true, placeholder: 'Category name',
+          onChange: function (e) { setBulkNewName(e.target.value); },
+          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndBulkCategorize(); },
+          style: {
+            flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        }),
+        h('button', {
+          onClick: handleCreateAndBulkCategorize, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
+        }, 'Add')
+      ) : null
     ) : null
   );
 }
@@ -2994,16 +3238,24 @@ function ReviewUncategorized(props) {
   var onBulkAssign = props.onBulkAssign; // (fragment, category) => void
   var categories = props.categories || ALL_CATEGORIES;
   var onCreateCategory = props.onCreateCategory;
+  // When set, any uncategorized transaction matching this pattern is a
+  // residual case from applyHousingTransferRule (an over-600 transfer, or a
+  // second same-month rent-band transfer) — these are deliberately excluded
+  // from "Apply to all" below, since a single standing category for every
+  // transfer to this recipient would defeat the entire point of splitting
+  // them by amount each month.
+  var housingRuleRegex = (props.housingRule && props.housingRule.enabled) ? housingRulePatternRegex(props.housingRule) : null;
 
   var groups = useMemo(function () {
     var byFragment = {};
     categorized.forEach(function (tx) {
       if (UNCATEGORIZED_BUCKETS.indexOf(tx.category) === -1) return;
       var frag = merchantFragment(tx.description);
-      if (!byFragment[frag]) byFragment[frag] = { fragment: frag, count: 0, total: 0, transactions: [] };
+      if (!byFragment[frag]) byFragment[frag] = { fragment: frag, count: 0, total: 0, transactions: [], isProtected: false };
       byFragment[frag].count += 1;
       byFragment[frag].total += Math.abs(tx.amount);
       byFragment[frag].transactions.push(tx);
+      if (housingRuleRegex && housingRuleRegex.test(tx.description)) byFragment[frag].isProtected = true;
     });
     Object.values(byFragment).forEach(function (g) {
       g.transactions.sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
@@ -3013,7 +3265,7 @@ function ReviewUncategorized(props) {
     // was spent — a merchant seen yesterday should surface before one only
     // seen months ago, even if the older one adds up to a bigger total.
     return Object.values(byFragment).sort(function (a, b) { return a.mostRecentDate < b.mostRecentDate ? 1 : -1; });
-  }, [categorized]);
+  }, [categorized, housingRuleRegex]);
 
   var pickerOpenFor = useState(null);
   var openFragment = pickerOpenFor[0], setOpenFragment = pickerOpenFor[1];
@@ -3027,6 +3279,10 @@ function ReviewUncategorized(props) {
   var selectedFragments = selectedFragmentsState[0], setSelectedFragments = selectedFragmentsState[1];
   var bulkPickerOpenState = useState(false);
   var bulkPickerOpen = bulkPickerOpenState[0], setBulkPickerOpen = bulkPickerOpenState[1];
+  var bulkPickerCreatingState = useState(false);
+  var bulkPickerCreating = bulkPickerCreatingState[0], setBulkPickerCreating = bulkPickerCreatingState[1];
+  var bulkPickerNewNameState = useState('');
+  var bulkPickerNewName = bulkPickerNewNameState[0], setBulkPickerNewName = bulkPickerNewNameState[1];
 
   function handleCreateAndAssign(fragment) {
     if (!onCreateCategory) return;
@@ -3057,10 +3313,28 @@ function ReviewUncategorized(props) {
   var selectedFragmentCount = Object.keys(selectedFragments).length;
 
   function handleBulkAssignToSelectedMerchants(category) {
-    Object.keys(selectedFragments).forEach(function (fragment) { onBulkAssign(fragment, category); });
+    // Deliberately calls the direct apply-and-remember function per fragment
+    // rather than looping through onBulkAssign (which routes through
+    // handleCategoryChange's confirmation-modal gate) — that gate is correct
+    // for a single merchant tap, where a "apply to all N?" confirmation
+    // makes sense, but here the multi-select + "Categorize" tap IS the
+    // confirmation. Routing through the gate meant each fragment in the loop
+    // just overwrote a pending confirmation state instead of applying
+    // anything, so only the last fragment (if you separately confirmed its
+    // leftover modal) ever actually got categorized.
+    var applyFn = props.onBulkAssignMerchant || onBulkAssign;
+    Object.keys(selectedFragments).forEach(function (fragment) { applyFn(fragment, category); });
     setBulkPickerOpen(false);
+    setBulkPickerCreating(false);
+    setBulkPickerNewName('');
     setMultiSelectMode(false);
     setSelectedFragments({});
+  }
+
+  function handleCreateAndBulkAssignMerchants() {
+    if (!onCreateCategory) return;
+    var created = onCreateCategory(bulkPickerNewName);
+    if (created) handleBulkAssignToSelectedMerchants(created);
   }
 
   if (groups.length === 0) {
@@ -3082,8 +3356,11 @@ function ReviewUncategorized(props) {
       var isSelected = Boolean(selectedFragments[g.fragment]);
       if (multiSelectMode) {
         return h('div', {
-          key: g.fragment, onClick: function () { toggleFragmentSelected(g.fragment); },
-          style: { display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', padding: '10px 0', cursor: 'pointer' },
+          key: g.fragment, onClick: g.isProtected ? null : function () { toggleFragmentSelected(g.fragment); },
+          style: {
+            display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', padding: '10px 0',
+            cursor: g.isProtected ? 'default' : 'pointer', opacity: g.isProtected ? 0.5 : 1,
+          },
         },
           h('div', {
             style: {
@@ -3095,7 +3372,7 @@ function ReviewUncategorized(props) {
           }, isSelected ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
           h('div', { style: { flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
             h('div', null,
-              h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment),
+              h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment + (g.isProtected ? ' \ud83d\udd12' : '')),
               h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, g.count + ' transaction' + (g.count === 1 ? '' : 's'))
             ),
             h(Money, { amount: g.total, style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } })
@@ -3108,29 +3385,46 @@ function ReviewUncategorized(props) {
           style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
         },
           h('div', null,
-            h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment),
+            h('div', { style: { fontSize: 13, color: 'var(--text)' } }, g.fragment + (g.isProtected ? ' \ud83d\udd12' : '')),
             h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, g.count + ' transaction' + (g.count === 1 ? '' : 's'))
           ),
           h(Money, { amount: g.total, style: { fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--muted)' } })
         ),
         isOpen ? h('div', { style: { marginTop: 10 } },
+          g.isProtected ? h('p', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 10, lineHeight: 1.5 } },
+            '\ud83d\udd12 Excluded from the housing transfer rule (either over the Rent limit, or a second rent-range transfer this month). Categorize each transaction below individually \u2014 this merchant is excluded from \u201cApply to all\u201d so a single category can\u2019t be applied to every transfer to this recipient.') : null,
           h('div', { style: { border: '1px solid var(--border)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' } },
             g.transactions.map(function (tx, i) {
               return h('div', {
                 key: tx.id,
                 style: {
-                  display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', fontSize: 12,
+                  display: 'flex', flexDirection: g.isProtected ? 'column' : 'row', gap: g.isProtected ? 6 : 10,
+                  padding: '8px 12px', fontSize: 12,
                   borderBottom: i < g.transactions.length - 1 ? '1px solid var(--border)' : 'none',
                 },
               },
-                h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDateWithYear(tx.dateMov)),
-                h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
-                h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
-                  tx.amount < 0 ? '' : '+', h(Money, { amount: tx.amount }))
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 10 } },
+                  h('span', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11, flexShrink: 0 } }, formatDateWithYear(tx.dateMov)),
+                  h('span', { style: { flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.description),
+                  h('span', { style: { fontFamily: 'var(--mono)', color: tx.amount < 0 ? 'var(--loss)' : 'var(--gain)', flexShrink: 0 } },
+                    tx.amount < 0 ? '' : '+', h(Money, { amount: tx.amount }))
+                ),
+                // Per-transaction category buttons, only for protected groups
+                // — each tap is a plain manual override on that ONE
+                // transaction (via onCategoryChange), never a standing rule
+                // for the whole fragment.
+                g.isProtected && props.onCategoryChange ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
+                  categories.map(function (c) {
+                    return h('button', {
+                      key: c, onClick: function () { props.onCategoryChange(tx.id, c); }, className: 'btn-secondary',
+                      style: { fontSize: 10, padding: '4px 8px' },
+                    }, c);
+                  })
+                ) : null
               );
             })
           ),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+          !g.isProtected ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
             categories.map(function (c) {
               return h('button', {
                 key: c,
@@ -3146,7 +3440,7 @@ function ReviewUncategorized(props) {
                 border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
               },
             }, '+ New category') : null
-          ),
+          ) : null,
           creating ? h('div', { style: { marginTop: 8, display: 'flex', gap: 6 } },
             h('input', {
               type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
@@ -3171,22 +3465,119 @@ function ReviewUncategorized(props) {
     ) : null,
     bulkPickerOpen ? h(Sheet, {
       title: 'Categorize ' + selectedFragmentCount + ' merchant' + (selectedFragmentCount === 1 ? '' : 's'),
-      onClose: function () { setBulkPickerOpen(false); },
+      onClose: function () { setBulkPickerOpen(false); setBulkPickerCreating(false); setBulkPickerNewName(''); },
     },
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
         categories.map(function (c) {
           return h('button', {
             key: c, onClick: function () { handleBulkAssignToSelectedMerchants(c); }, className: 'btn-secondary', style: { fontSize: 12 },
           }, c);
+        }),
+        onCreateCategory ? h('button', {
+          onClick: function () { setBulkPickerCreating(true); },
+          style: {
+            fontSize: 12, padding: '8px 14px', borderRadius: 8,
+            border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+          },
+        }, '+ New category') : null
+      ),
+      bulkPickerCreating ? h('div', { style: { marginTop: 10, display: 'flex', gap: 6 } },
+        h('input', {
+          type: 'text', value: bulkPickerNewName, autoFocus: true, placeholder: 'Category name',
+          onChange: function (e) { setBulkPickerNewName(e.target.value); },
+          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndBulkAssignMerchants(); },
+          style: {
+            flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        }),
+        h('button', {
+          onClick: handleCreateAndBulkAssignMerchants, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
+        }, 'Add')
+      ) : null
+    ) : null
+  );
+}
+
+// Lets the person adjust the per-month housing-transfer classification
+// thresholds (see applyHousingTransferRule above) without needing a code
+// change — rent in particular is expected to rise over time. Number inputs
+// use local draft state and commit on blur/Enter rather than on every
+// keystroke, so a momentarily-invalid intermediate value (e.g. clearing the
+// field to retype it) doesn't immediately propagate as a 0 or NaN threshold.
+function HousingRuleSettings(props) {
+  var rule = props.rule || DEFAULT_HOUSING_RULE;
+  var draftState = useState(function () {
+    return { utilitiesMax: String(rule.utilitiesMax), creditCardMax: String(rule.creditCardMax), rentMax: String(rule.rentMax) };
+  });
+  var draft = draftState[0], setDraft = draftState[1];
+
+  function commitField(field) {
+    var num = parseFloat(draft[field]);
+    if (!isFinite(num) || num <= 0) {
+      // Invalid input — revert the draft back to the last known-good value
+      // rather than silently committing something nonsensical.
+      setDraft(function (prev) { return Object.assign({}, prev, { [field]: String(rule[field]) }); });
+      return;
+    }
+    props.onChange({ [field]: num });
+  }
+
+  return h('div', { className: 'card', style: { marginBottom: 20 } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rule.enabled ? 14 : 0 } },
+      h('div', { style: { flex: 1, paddingRight: 10 } },
+        h('p', { style: { fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 2 } }, 'Split rent/utilities/credit card by amount'),
+        h('p', { style: { fontSize: 11, color: 'var(--muted)' } },
+          'For transfers to the same recipient, classifies each by size every month: the largest is Rent, mid-size is Credit Card Payment, small is Utilities.')
+      ),
+      h('button', {
+        className: 'btn-secondary',
+        style: {
+          flexShrink: 0, fontSize: 11, padding: '8px 14px',
+          background: rule.enabled ? 'var(--text)' : 'var(--surface)',
+          color: rule.enabled ? 'var(--bg)' : 'var(--text)',
+          borderColor: rule.enabled ? 'var(--text)' : 'var(--border)',
+        },
+        onClick: function () { props.onChange({ enabled: !rule.enabled }); },
+      }, rule.enabled ? 'On' : 'Off')
+    ),
+    rule.enabled ? h('div', null,
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+        [
+          { field: 'utilitiesMax', label: 'Utilities: below this amount' },
+          { field: 'creditCardMax', label: 'Credit Card Payment: below this amount' },
+          { field: 'rentMax', label: 'Rent: up to this amount (above it, left uncategorized)' },
+        ].map(function (row) {
+          return h('div', { key: row.field, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 } },
+            h('span', { style: { fontSize: 12, color: 'var(--muted)', flex: 1 } }, row.label),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 } },
+              h('span', { style: { fontSize: 13, color: 'var(--muted)' } }, '\u20ac'),
+              h('input', {
+                type: 'number', inputMode: 'decimal', value: draft[row.field],
+                onChange: function (e) { setDraft(function (prev) { return Object.assign({}, prev, { [row.field]: e.target.value }); }); },
+                onBlur: function () { commitField(row.field); },
+                onKeyDown: function (e) { if (e.key === 'Enter') commitField(row.field); },
+                style: {
+                  width: 70, fontSize: 13, padding: '6px 8px', borderRadius: 8, textAlign: 'right',
+                  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+                  fontFamily: 'var(--mono)',
+                },
+              })
+            )
+          );
         })
-      )
+      ),
+      h('p', { style: { fontSize: 11, color: 'var(--muted)', marginTop: 12, lineHeight: 1.5 } },
+        'A transfer above the Rent limit is always left uncategorized for you to review by hand. If a second transfer in the Rent range happens the same month, it\u2019s also left uncategorized \u2014 there can only be one rent payment per month.'),
+      h('p', { style: { fontSize: 11, color: 'var(--accent2)', marginTop: 8, lineHeight: 1.5 } },
+        '\u26a0\ufe0f This pattern is excluded from \u201cApply to all\u201d in Categorize merchants, since a single category for every transfer to this recipient would defeat the point of splitting them by amount. Edit one transaction\u2019s category individually if you ever need to correct it by hand.')
     ) : null
   );
 }
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
 
   // The most recent real transaction date across everything stored — answers
   // "up to what date do I actually have data," distinct from the upload
@@ -3219,6 +3610,9 @@ function SettingsScreen(props) {
       props.status ? h('p', { style: { fontSize: 12, color: 'var(--muted)', marginTop: 8 } }, props.status) : null,
       props.error ? h('p', { style: { fontSize: 12, color: 'var(--loss)', marginTop: 8 } }, props.error) : null
     ),
+
+    h('p', { className: 'section-title' }, 'Housing transfer rule'),
+    h(HousingRuleSettings, { rule: props.housingRule, onChange: props.onHousingRuleChange }),
 
     h('p', { className: 'section-title' }, 'Backup'),
     h('div', { className: 'card', style: { marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 } },
@@ -3259,7 +3653,10 @@ function SettingsScreen(props) {
 
     h('p', { className: 'section-title' }, 'Categorize merchants'),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h(ReviewUncategorized, { categorized: data.categorized, onBulkAssign: handleBulkAssign, categories: props.categories, onCreateCategory: props.onCreateCategory })
+      h(ReviewUncategorized, {
+        categorized: data.categorized, onBulkAssign: handleBulkAssign, categories: props.categories, onCreateCategory: props.onCreateCategory,
+        onBulkAssignMerchant: props.onBulkAssignMerchant, onCategoryChange: props.onCategoryChange, housingRule: props.housingRule,
+      })
     ),
 
     h(ScreenFooter)
@@ -3306,6 +3703,9 @@ function App() {
 
   var lastUploadAtState = useState(function () { return loadLastUploadAt(); });
   var lastUploadAt = lastUploadAtState[0], setLastUploadAt = lastUploadAtState[1];
+
+  var housingRuleState = useState(function () { return loadHousingRule(); });
+  var housingRule = housingRuleState[0], setHousingRule = housingRuleState[1];
 
   var faqOpenState = useState(false);
   var faqOpen = faqOpenState[0], setFaqOpen = faqOpenState[1];
@@ -3415,6 +3815,14 @@ function App() {
     setPrivacyMode(function (prev) {
       var next = !prev;
       savePrivacyMode(next);
+      return next;
+    });
+  }, []);
+
+  var handleHousingRuleChange = useCallback(function (updates) {
+    setHousingRule(function (prev) {
+      var next = Object.assign({}, prev, updates);
+      saveHousingRule(next);
       return next;
     });
   }, []);
@@ -3580,8 +3988,14 @@ function App() {
   }, []);
 
   var allCategoriesCombined = useMemo(function () {
-    return ALL_CATEGORIES.concat(customCategories.filter(function (c) { return ALL_CATEGORIES.indexOf(c) === -1; }));
-  }, [customCategories]);
+    var combined = ALL_CATEGORIES.concat(customCategories.filter(function (c) { return ALL_CATEGORIES.indexOf(c) === -1; }));
+    if (housingRule && housingRule.enabled) {
+      ['Rent', 'Credit Card Payment', 'Utilities'].forEach(function (c) {
+        if (combined.indexOf(c) === -1) combined.push(c);
+      });
+    }
+    return combined;
+  }, [customCategories, housingRule]);
 
   var handleCreateCategory = useCallback(function (name) {
     var trimmed = name.trim();
@@ -3669,11 +4083,13 @@ function App() {
     notes: notes, onSetNote: handleSetNote, merchantRules: merchantRules,
     monthOverrides: monthOverrides, onSetMonthOverride: handleSetMonthOverride,
     onApplyCategoryToSelection: handleApplyCategoryToSelection, lastUploadAt: lastUploadAt,
+    onBulkAssignMerchant: applyCategoryToFragmentAndRemember,
+    housingRule: housingRule, onHousingRuleChange: handleHousingRuleChange,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
