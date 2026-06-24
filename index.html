@@ -232,9 +232,26 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.24.1';
+var APP_VERSION = '1.25.3';
 
 var CHANGELOG = [
+  { version: '1.25.3', notes: [
+    '"Housing transfer rule" passa a ser a última secção em Definições, depois de "Categorize merchants"',
+    'Os limites passam a mostrar-se como intervalos completos por categoria (ex: "Credit Card Payment: > 100€ ≤ 500€"), em vez de só o limite superior de cada um',
+  ]},
+  { version: '1.25.2', notes: [
+    'Reescritas as três folhas de categorização em massa (Resumo, Transactions, e "Categorize merchants") como uma lista com scroll garantido, em vez da grelha de botões anterior que podia não deslizar com muitas categorias',
+    '"+ New category" passa a aparecer sempre no topo da lista, antes das categorias existentes',
+  ]},
+  { version: '1.25.1', notes: [
+    'O m\u00eas selecionado no Resumo deixa de reiniciar quando mudas de separador e voltas \u2014 mant\u00e9m-se igual ao da \u00faltima vez',
+    'Corrigido: categorizar uma transfer\u00eancia abrangida pela "Housing transfer rule" j\u00e1 n\u00e3o mostra a op\u00e7\u00e3o "Apply to all" \u2014 aplica sempre s\u00f3 \u00e0 transa\u00e7\u00e3o tocada, mantendo consistente a separa\u00e7\u00e3o por valor (Rent/Credit Card/Utilities) j\u00e1 feita por essa regra',
+  ]},
+  { version: '1.25.0', notes: [
+    'No Resumo, novo botão "Select" para marcar várias transações do mês e categorizá-las em conjunto, tal como já era possível em Transactions',
+    'Nova caixa de pesquisa no Resumo, para procurar transações por descrição, categoria ou nota dentro do mês ativo',
+    'Os filtros em Transactions (categoria, mês, pesquisa) deixam de reiniciar ao mudar de separador — ficam guardados até os limpares ou os alterares',
+  ]},
   { version: '1.24.1', notes: [
     'Auditoria de c\u00f3digo: removida l\u00f3gica duplicada no c\u00e1lculo de "Other income" (agora centralizada numa \u00fanica fun\u00e7\u00e3o, evitando que os dois sítios pudessem divergir no futuro)',
     'Otimiza\u00e7\u00e3o: o gr\u00e1fico "Category trend" em Tend\u00eancias passa a percorrer as transa\u00e7\u00f5es uma \u00fanica vez em vez de uma vez por m\u00eas, mais r\u00e1pido com hist\u00f3ricos longos',
@@ -486,10 +503,10 @@ var FAQ_ITEMS = [
     a: 'Se pagaste algo (ex: uma viagem, categorizada como Trips & Holidays) e depois alguém te devolveu parte do dinheiro, categoriza essa transação de devolução com a MESMA categoria da despesa original (em vez de a deixar como rendimento genérico). A categoria passa a mostrar o valor líquido — o que a viagem realmente te custou, já descontado o que recebeste de volta — e esse valor deixa de contar também como "Other income", para nunca seres contabilizado duas vezes. Isto aplica-se a qualquer categoria de despesa, não só viagens. Se o reembolso cobrir o gasto todo, a categoria desaparece do gráfico circular nesse mês, já que não sobra nada para mostrar.' },
   { q: 'Como funciona o modo privado?',
     a: 'Toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios da app \u2014 totais, transa\u00e7\u00f5es, gr\u00e1ficos \u2014 mantendo a forma vis\u00edvel para a app continuar a parecer normal, mas sem ningu\u00e9m conseguir ler os n\u00fameros reais por cima do teu ombro. Toca de novo para mostrar os valores. A prefer\u00eancia fica guardada neste dispositivo, mas n\u00e3o viaja com backups \u2014 ao restaurar um backup noutro telemóvel, o modo privado mant\u00e9m-se como estava nesse aparelho.' },
-  { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez em Transactions?',
-    a: 'Toca em "Select" no topo do ecr\u00e3 Transactions, depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
+  { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez?',
+    a: 'Em Transactions ou no Resumo, toca em "Select", depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
-    a: 'Em Transactions, usa a caixa de pesquisa para procurar por descri\u00e7\u00e3o, categoria ou nota. Usa o filtro "\ud83d\udcc5" para escolher um ou v\u00e1rios meses \u2014 podes combinar com a pesquisa e com o filtro de categoria. O bot\u00e3o "Clear all filters" limpa tudo de uma vez.' },
+    a: 'Em Transactions, usa a caixa de pesquisa para procurar por descri\u00e7\u00e3o, categoria ou nota. Usa o filtro "\ud83d\udcc5" para escolher um ou v\u00e1rios meses \u2014 podes combinar com a pesquisa e com o filtro de categoria. O bot\u00e3o "Clear all filters" limpa tudo de uma vez. Estes filtros ficam guardados mesmo que mudes de separador e voltes. No Resumo, h\u00e1 tamb\u00e9m uma caixa de pesquisa para procurar dentro do m\u00eas que est\u00e1s a ver.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -2398,14 +2415,23 @@ function SpendingPaceChart(props) {
 
 function OverviewScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
-  var selectedMonthState = useState(null);
-  var selectedMonth = selectedMonthState[0], setSelectedMonth = selectedMonthState[1];
+  // Lifted up to App (see there for why) so the selected month survives
+  // switching to another tab and back.
+  var selectedMonth = props.ovSelectedMonth, setSelectedMonth = props.onOvSelectedMonthChange;
   var categoryFilterState = useState(null);
   var categoryFilter = categoryFilterState[0], setCategoryFilter = categoryFilterState[1];
   var summaryFilterState = useState(null); // null | 'salary' | 'otherIncome' | 'invested' | 'investmentWithdrawals'
   var summaryFilter = summaryFilterState[0], setSummaryFilter = summaryFilterState[1];
   var comparisonModeState = useState('percent'); // 'percent' | 'absolute'
   var comparisonMode = comparisonModeState[0], setComparisonMode = comparisonModeState[1];
+  var searchTextState = useState('');
+  var searchText = searchTextState[0], setSearchText = searchTextState[1];
+  var selectModeState = useState(false);
+  var selectMode = selectModeState[0], setSelectMode = selectModeState[1];
+  var selectedIdsState = useState({}); // { [id]: true }
+  var selectedIds = selectedIdsState[0], setSelectedIds = selectedIdsState[1];
+  var bulkCategorizeOpenState = useState(false);
+  var bulkCategorizeOpen = bulkCategorizeOpenState[0], setBulkCategorizeOpen = bulkCategorizeOpenState[1];
 
   var activeMonth = selectedMonth || data.months[0];
 
@@ -2593,19 +2619,50 @@ function OverviewScreen(props) {
   }, []);
 
   var visibleTx = useMemo(function () {
-    if (summaryFilter === 'salary') return monthTx.filter(function (tx) { return tx.category === 'Salary'; });
-    if (summaryFilter === 'otherIncome') return monthTx.filter(isOtherIncome);
-    if (summaryFilter === 'invested') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; });
-    if (summaryFilter === 'investmentWithdrawals') return monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; });
-    if (categoryFilter) return monthTx.filter(function (tx) { return tx.category === categoryFilter; });
-    return monthTx;
-  }, [monthTx, categoryFilter, summaryFilter]);
+    var base;
+    if (summaryFilter === 'salary') base = monthTx.filter(function (tx) { return tx.category === 'Salary'; });
+    else if (summaryFilter === 'otherIncome') base = monthTx.filter(isOtherIncome);
+    else if (summaryFilter === 'invested') base = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; });
+    else if (summaryFilter === 'investmentWithdrawals') base = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; });
+    else if (categoryFilter) base = monthTx.filter(function (tx) { return tx.category === categoryFilter; });
+    else base = monthTx;
+
+    var q = searchText.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(function (tx) {
+      var haystack = (tx.description + ' ' + tx.category + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
+      return haystack.indexOf(q) !== -1;
+    });
+  }, [monthTx, categoryFilter, summaryFilter, searchText, props.notes]);
 
   var activeFilterLabel = summaryFilter === 'salary' ? 'Salary'
     : summaryFilter === 'otherIncome' ? 'Other income'
     : summaryFilter === 'invested' ? 'Invested'
     : summaryFilter === 'investmentWithdrawals' ? 'Investment withdrawals'
     : categoryFilter;
+
+  function toggleSelectMode() {
+    setSelectMode(function (prev) { return !prev; });
+    setSelectedIds({});
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds(function (prev) {
+      var next = Object.assign({}, prev);
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
+  }
+
+  var selectedCount = Object.keys(selectedIds).length;
+
+  function handleBulkCategorize(category) {
+    if (props.onApplyCategoryToSelection) props.onApplyCategoryToSelection(Object.keys(selectedIds), category);
+    setBulkCategorizeOpen(false);
+    setSelectMode(false);
+    setSelectedIds({});
+  }
 
   if (props.transactions.length === 0) {
     return h(EmptyState, { onFile: props.onAddFile, error: props.error });
@@ -2768,19 +2825,75 @@ function OverviewScreen(props) {
     ) : null,
 
     h('div', null,
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
-        h('p', { className: 'section-title', style: { margin: 0 } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 } },
+        h('p', { className: 'section-title', style: { margin: 0, flex: 1 } },
           'Transactions (' + visibleTx.length + ')' + (activeFilterLabel ? ' \u2014 ' + activeFilterLabel : ' \u2014 tap one to recategorize')),
         activeFilterLabel ? h('button', {
-          className: 'btn-secondary', style: { fontSize: 11 },
+          className: 'btn-secondary', style: { fontSize: 11, flexShrink: 0 },
           onClick: function () { setCategoryFilter(null); setSummaryFilter(null); },
-        }, 'Clear') : null
+        }, 'Clear') : null,
+        h('button', {
+          className: 'btn-secondary', style: { fontSize: 11, flexShrink: 0 }, onClick: toggleSelectMode,
+        }, selectMode ? 'Cancel' : 'Select')
+      ),
+      h('div', { style: { marginBottom: 12 } },
+        h('input', {
+          type: 'text', value: searchText, placeholder: 'Search description, category, or note\u2026',
+          onChange: function (e) { setSearchText(e.target.value); },
+          style: {
+            width: '100%', fontSize: 13, padding: '10px 12px', borderRadius: 10,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        })
       ),
       visibleTx.length === 0
         ? h('p', { style: { color: 'var(--muted)', fontSize: 13 } }, 'No transactions match this filter.')
-        : visibleTx.map(function (tx) { return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote, onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months }); })
+        : visibleTx.map(function (tx) {
+            if (selectMode) {
+              return h('div', {
+                key: tx.id, onClick: function () { toggleSelected(tx.id); },
+                style: { display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', padding: '10px 0', cursor: 'pointer' },
+              },
+                h('div', {
+                  style: {
+                    width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                    border: '2px solid ' + (selectedIds[tx.id] ? 'var(--accent)' : 'var(--border)'),
+                    background: selectedIds[tx.id] ? 'var(--accent)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  },
+                }, selectedIds[tx.id] ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+                h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '50px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
+                  h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
+                  h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' } }, tx.description),
+                  h('span', { style: { fontFamily: 'var(--mono)', textAlign: 'right', color: tx.amount > 0 ? 'var(--gain)' : 'var(--loss)' } },
+                    tx.amount > 0 ? '+' : '', h(Money, { amount: tx.amount }))
+                )
+              );
+            }
+            return h(TransactionRow, { key: tx.id, tx: tx, onCategoryChange: props.onCategoryChange, categories: props.categories, onCreateCategory: props.onCreateCategory, note: props.notes ? props.notes[tx.id] : null, onSetNote: props.onSetNote, onSetMonthOverride: props.onSetMonthOverride, availableMonths: data.months });
+          })
     ),
-    h(ScreenFooter)
+    h(ScreenFooter),
+
+    selectMode && selectedCount > 0 ? h('div', {
+      style: {
+        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 16, zIndex: 40,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
+        boxShadow: '0 8px 24px rgba(' + cssVar('--shadow-rgb') + ', 0.2)',
+        padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      },
+    },
+      h('span', { style: { fontSize: 13, color: 'var(--text)' } }, selectedCount + ' selected'),
+      h('button', { className: 'btn-primary', style: { fontSize: 12, padding: '8px 16px' }, onClick: function () { setBulkCategorizeOpen(true); } }, 'Categorize')
+    ) : null,
+
+    bulkCategorizeOpen ? h(CategoryPickerSheet, {
+      title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
+      categories: props.categories || ALL_CATEGORIES,
+      onCreateCategory: props.onCreateCategory,
+      onSelect: handleBulkCategorize,
+      onClose: function () { setBulkCategorizeOpen(false); },
+    }) : null
   );
 }
 
@@ -2923,12 +3036,12 @@ function TrendsScreen(props) {
 
 function TransactionsScreen(props) {
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
-  var filterCategoryState = useState(null);
-  var filterCategory = filterCategoryState[0], setFilterCategory = filterCategoryState[1];
-  var searchTextState = useState('');
-  var searchText = searchTextState[0], setSearchText = searchTextState[1];
-  var monthFilterState = useState([]); // [] = all months; otherwise a set of selected month keys
-  var monthFilter = monthFilterState[0], setMonthFilter = monthFilterState[1];
+  // Filter state is lifted up to App (see there for why) — these read/write
+  // through props rather than their own useState, so the filters survive
+  // switching to another tab and back.
+  var filterCategory = props.txFilterCategory, setFilterCategory = props.onTxFilterCategoryChange;
+  var searchText = props.txSearchText, setSearchText = props.onTxSearchTextChange;
+  var monthFilter = props.txMonthFilter, setMonthFilter = props.onTxMonthFilterChange;
   var monthPickerOpenState = useState(false);
   var monthPickerOpen = monthPickerOpenState[0], setMonthPickerOpen = monthPickerOpenState[1];
   var categoryPickerOpenState = useState(false);
@@ -2939,10 +3052,6 @@ function TransactionsScreen(props) {
   var selectedIds = selectedIdsState[0], setSelectedIds = selectedIdsState[1];
   var bulkCategorizeOpenState = useState(false);
   var bulkCategorizeOpen = bulkCategorizeOpenState[0], setBulkCategorizeOpen = bulkCategorizeOpenState[1];
-  var bulkCreatingState = useState(false);
-  var bulkCreating = bulkCreatingState[0], setBulkCreating = bulkCreatingState[1];
-  var bulkNewNameState = useState('');
-  var bulkNewName = bulkNewNameState[0], setBulkNewName = bulkNewNameState[1];
 
   var filtered = useMemo(function () {
     var q = searchText.trim().toLowerCase();
@@ -2998,16 +3107,8 @@ function TransactionsScreen(props) {
   function handleBulkCategorize(category) {
     if (props.onApplyCategoryToSelection) props.onApplyCategoryToSelection(Object.keys(selectedIds), category);
     setBulkCategorizeOpen(false);
-    setBulkCreating(false);
-    setBulkNewName('');
     setSelectMode(false);
     setSelectedIds({});
-  }
-
-  function handleCreateAndBulkCategorize() {
-    if (!props.onCreateCategory) return;
-    var created = props.onCreateCategory(bulkNewName);
-    if (created) handleBulkCategorize(created);
   }
 
   if (props.transactions.length === 0) {
@@ -3112,39 +3213,13 @@ function TransactionsScreen(props) {
       onClose: function () { setCategoryPickerOpen(false); },
     }) : null,
 
-    bulkCategorizeOpen ? h(Sheet, {
+    bulkCategorizeOpen ? h(CategoryPickerSheet, {
       title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
-      onClose: function () { setBulkCategorizeOpen(false); setBulkCreating(false); setBulkNewName(''); },
-    },
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-        (props.categories || ALL_CATEGORIES).map(function (c) {
-          return h('button', {
-            key: c, onClick: function () { handleBulkCategorize(c); }, className: 'btn-secondary', style: { fontSize: 12 },
-          }, c);
-        }),
-        props.onCreateCategory ? h('button', {
-          onClick: function () { setBulkCreating(true); },
-          style: {
-            fontSize: 12, padding: '8px 14px', borderRadius: 8,
-            border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-          },
-        }, '+ New category') : null
-      ),
-      bulkCreating ? h('div', { style: { marginTop: 10, display: 'flex', gap: 6 } },
-        h('input', {
-          type: 'text', value: bulkNewName, autoFocus: true, placeholder: 'Category name',
-          onChange: function (e) { setBulkNewName(e.target.value); },
-          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndBulkCategorize(); },
-          style: {
-            flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
-            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-          },
-        }),
-        h('button', {
-          onClick: handleCreateAndBulkCategorize, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
-        }, 'Add')
-      ) : null
-    ) : null
+      categories: props.categories || ALL_CATEGORIES,
+      onCreateCategory: props.onCreateCategory,
+      onSelect: handleBulkCategorize,
+      onClose: function () { setBulkCategorizeOpen(false); },
+    }) : null
   );
 }
 
@@ -3153,6 +3228,60 @@ function TransactionsScreen(props) {
 // same pattern (a scrollable list of checkable month options plus a Clear
 // and Done action) doesn't belong inlined into TransactionsScreen's already
 // long render body.
+// Reusable scrollable picker for "choose one category to apply now" flows
+// (bulk-categorize a multi-select of transactions or merchants) — replaces
+// the flat wrapped button grid those flows used before, which didn't
+// reliably scroll once the category list ran long and had no room left
+// for "+ New category" to even be visible. Uses an explicit maxHeight +
+// overflowY on the list itself (the same belt-and-suspenders approach
+// MonthFilterSheet/CategoryFilterSheet already use) rather than depending
+// only on the Sheet's own flex-based sizing.
+function CategoryPickerSheet(props) {
+  var creatingState = useState(false);
+  var creating = creatingState[0], setCreating = creatingState[1];
+  var newNameState = useState('');
+  var newName = newNameState[0], setNewName = newNameState[1];
+
+  function handleCreateAndSelect() {
+    if (!props.onCreateCategory) return;
+    var created = props.onCreateCategory(newName);
+    if (created) props.onSelect(created);
+  }
+
+  return h(Sheet, { title: props.title, onClose: props.onClose },
+    creating ? h('div', { style: { display: 'flex', gap: 6, marginBottom: 14 } },
+      h('input', {
+        type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
+        onChange: function (e) { setNewName(e.target.value); },
+        onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndSelect(); },
+        style: {
+          flex: 1, fontSize: 13, padding: '9px 12px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+        },
+      }),
+      h('button', { onClick: handleCreateAndSelect, className: 'btn-secondary', style: { fontSize: 12, padding: '8px 14px' } }, 'Add')
+    ) : (props.onCreateCategory ? h('button', {
+      onClick: function () { setCreating(true); },
+      style: {
+        width: '100%', textAlign: 'left', fontSize: 13, padding: '10px 4px', marginBottom: 6,
+        border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+      },
+    }, '+ New category') : null),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '55vh', overflowY: 'auto' } },
+      props.categories.map(function (c) {
+        return h('button', {
+          key: c, onClick: function () { props.onSelect(c); },
+          style: {
+            width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            fontSize: 13, padding: '11px 4px', border: 'none', borderBottom: '1px solid var(--border)',
+            background: 'transparent', color: 'var(--text)', cursor: 'pointer',
+          },
+        }, c, h('span', { style: { color: 'var(--muted)', fontSize: 13 } }, '\u203a'));
+      })
+    )
+  );
+}
+
 function MonthFilterSheet(props) {
   return h(Sheet, { title: 'Filter by month', onClose: props.onClose },
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '50vh', overflowY: 'auto' } },
@@ -3279,10 +3408,6 @@ function ReviewUncategorized(props) {
   var selectedFragments = selectedFragmentsState[0], setSelectedFragments = selectedFragmentsState[1];
   var bulkPickerOpenState = useState(false);
   var bulkPickerOpen = bulkPickerOpenState[0], setBulkPickerOpen = bulkPickerOpenState[1];
-  var bulkPickerCreatingState = useState(false);
-  var bulkPickerCreating = bulkPickerCreatingState[0], setBulkPickerCreating = bulkPickerCreatingState[1];
-  var bulkPickerNewNameState = useState('');
-  var bulkPickerNewName = bulkPickerNewNameState[0], setBulkPickerNewName = bulkPickerNewNameState[1];
 
   function handleCreateAndAssign(fragment) {
     if (!onCreateCategory) return;
@@ -3325,16 +3450,8 @@ function ReviewUncategorized(props) {
     var applyFn = props.onBulkAssignMerchant || onBulkAssign;
     Object.keys(selectedFragments).forEach(function (fragment) { applyFn(fragment, category); });
     setBulkPickerOpen(false);
-    setBulkPickerCreating(false);
-    setBulkPickerNewName('');
     setMultiSelectMode(false);
     setSelectedFragments({});
-  }
-
-  function handleCreateAndBulkAssignMerchants() {
-    if (!onCreateCategory) return;
-    var created = onCreateCategory(bulkPickerNewName);
-    if (created) handleBulkAssignToSelectedMerchants(created);
   }
 
   if (groups.length === 0) {
@@ -3463,39 +3580,13 @@ function ReviewUncategorized(props) {
       h('span', { style: { fontSize: 12, color: 'var(--text)' } }, selectedFragmentCount + ' merchant' + (selectedFragmentCount === 1 ? '' : 's') + ' selected'),
       h('button', { className: 'btn-primary', style: { fontSize: 11, padding: '7px 14px' }, onClick: function () { setBulkPickerOpen(true); } }, 'Categorize')
     ) : null,
-    bulkPickerOpen ? h(Sheet, {
+    bulkPickerOpen ? h(CategoryPickerSheet, {
       title: 'Categorize ' + selectedFragmentCount + ' merchant' + (selectedFragmentCount === 1 ? '' : 's'),
-      onClose: function () { setBulkPickerOpen(false); setBulkPickerCreating(false); setBulkPickerNewName(''); },
-    },
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-        categories.map(function (c) {
-          return h('button', {
-            key: c, onClick: function () { handleBulkAssignToSelectedMerchants(c); }, className: 'btn-secondary', style: { fontSize: 12 },
-          }, c);
-        }),
-        onCreateCategory ? h('button', {
-          onClick: function () { setBulkPickerCreating(true); },
-          style: {
-            fontSize: 12, padding: '8px 14px', borderRadius: 8,
-            border: '1px dashed var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-          },
-        }, '+ New category') : null
-      ),
-      bulkPickerCreating ? h('div', { style: { marginTop: 10, display: 'flex', gap: 6 } },
-        h('input', {
-          type: 'text', value: bulkPickerNewName, autoFocus: true, placeholder: 'Category name',
-          onChange: function (e) { setBulkPickerNewName(e.target.value); },
-          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndBulkAssignMerchants(); },
-          style: {
-            flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
-            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-          },
-        }),
-        h('button', {
-          onClick: handleCreateAndBulkAssignMerchants, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' },
-        }, 'Add')
-      ) : null
-    ) : null
+      categories: categories,
+      onCreateCategory: onCreateCategory,
+      onSelect: handleBulkAssignToSelectedMerchants,
+      onClose: function () { setBulkPickerOpen(false); },
+    }) : null
   );
 }
 
@@ -3523,6 +3614,21 @@ function HousingRuleSettings(props) {
     props.onChange({ [field]: num });
   }
 
+  function formatEUR0(n) {
+    return Number(n).toLocaleString('pt-PT', { maximumFractionDigits: 0 }) + '\u20ac';
+  }
+
+  // Each input still edits one of the three chained thresholds
+  // (utilitiesMax / creditCardMax / rentMax) — the summary box below shows
+  // the full inclusive range each one actually produces, in the exact
+  // format requested, built from those same three numbers so there's no
+  // way to create a gap or overlap between categories.
+  var rows = [
+    { field: 'utilitiesMax', name: 'Utilities' },
+    { field: 'creditCardMax', name: 'Credit Card Payment' },
+    { field: 'rentMax', name: 'Rent' },
+  ];
+
   return h('div', { className: 'card', style: { marginBottom: 20 } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rule.enabled ? 14 : 0 } },
       h('div', { style: { flex: 1, paddingRight: 10 } },
@@ -3542,14 +3648,20 @@ function HousingRuleSettings(props) {
       }, rule.enabled ? 'On' : 'Off')
     ),
     rule.enabled ? h('div', null,
+      h('div', { style: { padding: '10px 12px', background: 'var(--surface2)', borderRadius: 10, marginBottom: 16 } },
+        h('p', { style: { fontSize: 11, color: 'var(--text)', fontFamily: 'var(--mono)', lineHeight: 1.8 } },
+          'Utilities: \u2264 ' + formatEUR0(rule.utilitiesMax)),
+        h('p', { style: { fontSize: 11, color: 'var(--text)', fontFamily: 'var(--mono)', lineHeight: 1.8 } },
+          'Credit Card Payment: > ' + formatEUR0(rule.utilitiesMax) + '  \u2264 ' + formatEUR0(rule.creditCardMax)),
+        h('p', { style: { fontSize: 11, color: 'var(--text)', fontFamily: 'var(--mono)', lineHeight: 1.8 } },
+          'Rent: > ' + formatEUR0(rule.creditCardMax) + '  \u2264 ' + formatEUR0(rule.rentMax)),
+        h('p', { style: { fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', lineHeight: 1.8 } },
+          'Else (> ' + formatEUR0(rule.rentMax) + '): uncategorized')
+      ),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-        [
-          { field: 'utilitiesMax', label: 'Utilities: below this amount' },
-          { field: 'creditCardMax', label: 'Credit Card Payment: below this amount' },
-          { field: 'rentMax', label: 'Rent: up to this amount (above it, left uncategorized)' },
-        ].map(function (row) {
+        rows.map(function (row) {
           return h('div', { key: row.field, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 } },
-            h('span', { style: { fontSize: 12, color: 'var(--muted)', flex: 1 } }, row.label),
+            h('span', { style: { fontSize: 12, color: 'var(--muted)', flex: 1 } }, row.name + ' \u2014 up to'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 } },
               h('span', { style: { fontSize: 13, color: 'var(--muted)' } }, '\u20ac'),
               h('input', {
@@ -3558,7 +3670,7 @@ function HousingRuleSettings(props) {
                 onBlur: function () { commitField(row.field); },
                 onKeyDown: function (e) { if (e.key === 'Enter') commitField(row.field); },
                 style: {
-                  width: 70, fontSize: 13, padding: '6px 8px', borderRadius: 8, textAlign: 'right',
+                  width: 80, fontSize: 13, padding: '6px 8px', borderRadius: 8, textAlign: 'right',
                   border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
                   fontFamily: 'var(--mono)',
                 },
@@ -3611,9 +3723,6 @@ function SettingsScreen(props) {
       props.error ? h('p', { style: { fontSize: 12, color: 'var(--loss)', marginTop: 8 } }, props.error) : null
     ),
 
-    h('p', { className: 'section-title' }, 'Housing transfer rule'),
-    h(HousingRuleSettings, { rule: props.housingRule, onChange: props.onHousingRuleChange }),
-
     h('p', { className: 'section-title' }, 'Backup'),
     h('div', { className: 'card', style: { marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 } },
       h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 4 } },
@@ -3658,6 +3767,9 @@ function SettingsScreen(props) {
         onBulkAssignMerchant: props.onBulkAssignMerchant, onCategoryChange: props.onCategoryChange, housingRule: props.housingRule,
       })
     ),
+
+    h('p', { className: 'section-title' }, 'Housing transfer rule'),
+    h(HousingRuleSettings, { rule: props.housingRule, onChange: props.onHousingRuleChange }),
 
     h(ScreenFooter)
   );
@@ -3706,6 +3818,23 @@ function App() {
 
   var housingRuleState = useState(function () { return loadHousingRule(); });
   var housingRule = housingRuleState[0], setHousingRule = housingRuleState[1];
+
+  // Lifted up from TransactionsScreen so the person's filter choices survive
+  // switching to another tab and back — a screen component fully unmounts
+  // (and its own useState resets) whenever a different tab is shown, since
+  // App only ever renders one screen element at a time.
+  var txFilterCategoryState = useState(null);
+  var txFilterCategory = txFilterCategoryState[0], setTxFilterCategory = txFilterCategoryState[1];
+  var txSearchTextState = useState('');
+  var txSearchText = txSearchTextState[0], setTxSearchText = txSearchTextState[1];
+  var txMonthFilterState = useState([]);
+  var txMonthFilter = txMonthFilterState[0], setTxMonthFilter = txMonthFilterState[1];
+
+  // Same reasoning as above — the month selected on Overview previously
+  // lived in OverviewScreen's own useState, so it reset to "current month"
+  // every time the person switched to another tab and back.
+  var ovSelectedMonthState = useState(null);
+  var ovSelectedMonth = ovSelectedMonthState[0], setOvSelectedMonth = ovSelectedMonthState[1];
 
   var faqOpenState = useState(false);
   var faqOpen = faqOpenState[0], setFaqOpen = faqOpenState[1];
@@ -3958,6 +4087,18 @@ function App() {
   var handleCategoryChange = useCallback(function (id, category) {
     var changedTx = transactions.find(function (t) { return t.id === id; });
     if (!changedTx) return;
+
+    // Transactions matching the housing-transfer rule's recipient pattern
+    // never go through the bulk "Apply to all N?" flow below, even when
+    // many other transactions share the same fragment — a single category
+    // for every transfer to this recipient would defeat the entire point of
+    // the rule, which classifies each one individually by amount every
+    // month. Always applied as a plain override on just this transaction.
+    if (housingRule && housingRule.enabled && housingRulePatternRegex(housingRule).test(changedTx.description)) {
+      applyCategoryToSingleTransaction(id, category);
+      return;
+    }
+
     var fragment = merchantFragment(changedTx.description);
     var affected = transactions.filter(function (t) { return merchantFragment(t.description) === fragment; });
 
@@ -3966,7 +4107,7 @@ function App() {
       return;
     }
     setPendingCategoryChange({ fragment: fragment, category: category, affected: affected, triggerId: id });
-  }, [transactions]);
+  }, [transactions, housingRule]);
 
   var handleConfirmCategoryChange = useCallback(function () {
     if (!pendingCategoryChange) return;
@@ -4085,6 +4226,10 @@ function App() {
     onApplyCategoryToSelection: handleApplyCategoryToSelection, lastUploadAt: lastUploadAt,
     onBulkAssignMerchant: applyCategoryToFragmentAndRemember,
     housingRule: housingRule, onHousingRuleChange: handleHousingRuleChange,
+    txFilterCategory: txFilterCategory, onTxFilterCategoryChange: setTxFilterCategory,
+    txSearchText: txSearchText, onTxSearchTextChange: setTxSearchText,
+    txMonthFilter: txMonthFilter, onTxMonthFilterChange: setTxMonthFilter,
+    ovSelectedMonth: ovSelectedMonth, onOvSelectedMonthChange: setOvSelectedMonth,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
