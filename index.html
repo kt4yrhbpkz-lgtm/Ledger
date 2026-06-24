@@ -232,9 +232,21 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.25.6';
+var APP_VERSION = '1.26.0';
 
 var CHANGELOG = [
+  { version: '1.26.0', notes: [
+    'Novas secções em Definições: "Categories" e "Automatic categorization rules"',
+    '"Categories" mostra todas as categorias (incluindo as incorporadas) com o número de transações em cada uma — podes apagar (com confirmação; as transações dessa categoria passam para Other) ou renomear qualquer uma, exceto Other, Salary e Investments, que ficam protegidas por dependerem de lógica própria',
+    'Apagar Rent, Credit Card Payment ou Utilities enquanto a Housing transfer rule estiver ativa mostra um aviso a explicar que é preciso desativar a regra primeiro, para a categoria não voltar a ser criada no mês seguinte',
+    'Renomear uma categoria atualiza-se de imediato em todas as transações já guardadas com o nome antigo',
+    '"Automatic categorization rules" lista todas as regras automáticas de comerciante (criadas a partir de categorizações em massa anteriores), com opção de apagar cada uma individualmente',
+  ]},
+  { version: '1.25.7', notes: [
+    'Corrigido (confirmado por vídeo): o botão circular de "voltar ao topo" passou a aparecer por cima das folhas de categorização, tapando a última categoria — movido para a mesma área de empilhamento que as folhas, deixa agora de aparecer por cima delas',
+    'Corrigido: ao tentar fazer scroll dentro de uma folha de categorização, o gesto podia ser interpretado em simultâneo como puxar para atualizar ou trocar de mês, bloqueando o scroll. Esses gestos da página deixam de ativar-se enquanto uma folha estiver aberta.',
+    'A barra "X selected" no Resumo e em Transactions deixa de poder ficar tapada pelo botão de voltar ao topo, ao deixar mais espaço entre os dois',
+  ]},
   { version: '1.25.6', notes: [
     'As categorias passam a aparecer sempre por ordem alfabética em qualquer lista de categorização da app',
     'Corrigido um bug real: ao categorizar em massa (Resumo, Transactions, ou Categorize merchants), a última categoria da lista podia ficar inacessível, abaixo do ecrã — causado por um scroll aninhado dentro da folha que o iOS nem sempre consegue repassar corretamente. Removido o scroll duplicado nessas listas.',
@@ -509,6 +521,10 @@ var FAQ_ITEMS = [
     a: 'Mostra que percentagem do que ganhaste este m\u00eas (sal\u00e1rio + outros rendimentos) ainda n\u00e3o gastaste \u2014 calculado como Net this month \u00f7 Total income. Se gastares mais do que ganhaste, a percentagem fica negativa (ex: -20%), mostrando isso mesmo, em vez de simplesmente parar em 0%. Num m\u00eas sem nenhum rendimento registado, a barra mostra 0%.' },
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
+  { q: 'Como apago ou renomeio uma categoria?',
+    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
+  { q: 'Como apago uma regra automática de comerciante?',
+    a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
   { q: 'Como funciona a "Housing transfer rule"?',
     a: 'Em Defini\u00e7\u00f5es, ativa esta regra para dividir automaticamente as transfer\u00eancias para a mesma pessoa (ex: o teu companheiro/a de casa) em tr\u00eas categorias, com base no valor: a maior do m\u00eas (entre o limite de Credit Card e o de Rent) fica Rent; valores m\u00e9dios ficam Credit Card Payment; valores pequenos ficam Utilities. Se houver uma transfer\u00eancia acima do limite de Rent, ou uma segunda na faixa de Rent no mesmo m\u00eas, fica sem categoria para revisares em "Categorize merchants" \u2014 nunca \u00e9 adivinhada automaticamente. Os limites (100\u20ac, 500\u20ac, 600\u20ac por defeito) podem ser ajustados em Defini\u00e7\u00f5es. Este destinat\u00e1rio fica exclu\u00eddo do "Apply to all" em massa, j\u00e1 que uma \u00fanica categoria para todas as transfer\u00eancias anularia o prop\u00f3sito da regra \u2014 corrige cada transa\u00e7\u00e3o individualmente se precisares.' },
   { q: 'O que faz o botão "Credits" no Resumo?',
@@ -671,7 +687,7 @@ function merchantFragment(description) {
 var SALARY_SENDER_PATTERN = /TFI JOANA FILIPA TAVA/i;
 var SALARY_MIN_AMOUNT = 1500;
 
-function autoCategory(description, amount, merchantRules) {
+function autoCategory(description, amount, merchantRules, disabledCategories) {
   if (typeof amount === 'number' && amount >= SALARY_MIN_AMOUNT && SALARY_SENDER_PATTERN.test(description)) {
     return 'Salary';
   }
@@ -681,10 +697,20 @@ function autoCategory(description, amount, merchantRules) {
   // amount), not something a merchant-name rule should be able to shadow.
   if (merchantRules) {
     var fragment = merchantFragment(description);
-    if (merchantRules[fragment]) return merchantRules[fragment];
+    var merchantResult = merchantRules[fragment];
+    if (merchantResult && (!disabledCategories || disabledCategories.indexOf(merchantResult) === -1)) {
+      return merchantResult;
+    }
   }
   for (var i = 0; i < RULES.length; i++) {
-    if (RULES[i].test(description)) return RULES[i].category;
+    if (RULES[i].test(description)) {
+      // A deleted built-in category falls through to the NEXT matching
+      // rule (or eventually 'Other') rather than stopping here — the
+      // person chose to suppress this specific category, not to make this
+      // transaction unmatched by every later rule too.
+      if (disabledCategories && disabledCategories.indexOf(RULES[i].category) !== -1) continue;
+      return RULES[i].category;
+    }
   }
   return 'Other';
 }
@@ -842,6 +868,8 @@ var MONTH_OVERRIDES_KEY = 'ledger:month-overrides';
 var PRIVACY_MODE_KEY = 'ledger:privacy-mode';
 var LAST_UPLOAD_KEY = 'ledger:last-upload-at';
 var HOUSING_RULE_KEY = 'ledger:housing-transfer-rule';
+var DISABLED_CATEGORIES_KEY = 'ledger:disabled-categories';
+var CATEGORY_RENAMES_KEY = 'ledger:category-renames';
 
 function loadStoredTransactions() {
   try {
@@ -996,6 +1024,45 @@ function loadHousingRule() {
 
 function saveHousingRule(rule) {
   localStorage.setItem(HOUSING_RULE_KEY, JSON.stringify(rule));
+}
+
+// Built-in categories the person has chosen to delete — their underlying
+// keyword RULES entry stops producing that category (falls through to
+// 'Other' instead), and the category itself disappears from every category
+// picker in the app. Stored separately from customCategories since these
+// are categories the CODE defines, not ones the person created, so there's
+// nothing to remove from a list — only a name to suppress.
+function loadDisabledCategories() {
+  try {
+    var raw = localStorage.getItem(DISABLED_CATEGORIES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveDisabledCategories(list) {
+  localStorage.setItem(DISABLED_CATEGORIES_KEY, JSON.stringify(list));
+}
+
+// { oldName: newName } — applied as a final translation step in
+// useLedgerData, AFTER every other categorization step (keyword rules,
+// merchant rules, the housing-transfer rule, manual overrides). This means
+// a rename takes effect immediately for every transaction already carrying
+// the old name, without needing to rewrite overrides/merchantRules/etc. in
+// place — the underlying stored category can stay exactly as it was, only
+// the displayed name changes.
+function loadCategoryRenames() {
+  try {
+    var raw = localStorage.getItem(CATEGORY_RENAMES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveCategoryRenames(renames) {
+  localStorage.setItem(CATEGORY_RENAMES_KEY, JSON.stringify(renames));
 }
 
 // Builds a regex from the configured pattern string. CGD masks the middle
@@ -2027,13 +2094,13 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule) {
+function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames) {
   var baseCategorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       var monthOverride = monthOverrides ? monthOverrides[tx.id] : null;
       return Object.assign({}, tx, {
-        category: override || autoCategory(tx.description, tx.amount, merchantRules),
+        category: override || autoCategory(tx.description, tx.amount, merchantRules, disabledCategories),
         isOverride: Boolean(override),
         // The real bank date is untouched — this only changes which month
         // a transaction is grouped into for totals and charts, e.g. a
@@ -2043,16 +2110,45 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
         hasMonthOverride: Boolean(monthOverride),
       });
     });
-  }, [transactions, overrides, merchantRules, monthOverrides]);
+  }, [transactions, overrides, merchantRules, monthOverrides, disabledCategories]);
 
   // A second pass, separate from the per-transaction logic above, since this
   // rule needs to see every transaction in a month before it can decide any
   // one of them (which one is "the" rent transfer depends on what else
   // happened that month) — something autoCategory()'s one-transaction-at-a-
   // time design can't express.
-  var categorized = useMemo(function () {
+  var housingApplied = useMemo(function () {
     return applyHousingTransferRule(baseCategorized, housingRule);
   }, [baseCategorized, housingRule]);
+
+  // A third pass — even a MANUAL override on one specific transaction is
+  // forced to 'Other' if its category has since been deleted. This runs
+  // after the housing rule (in case one of Rent/Credit Card Payment/
+  // Utilities was deleted) and independently of how the category was
+  // assigned, since the person explicitly chose "delete this category, no
+  // exceptions" rather than "stop suggesting this category for new
+  // transactions but leave existing manual choices alone."
+  var disabledApplied = useMemo(function () {
+    if (!disabledCategories || disabledCategories.length === 0) return housingApplied;
+    return housingApplied.map(function (tx) {
+      if (disabledCategories.indexOf(tx.category) === -1) return tx;
+      return Object.assign({}, tx, { category: 'Other' });
+    });
+  }, [housingApplied, disabledCategories]);
+
+  // A fourth and final pass — renames are a pure display translation, never
+  // changing what's actually stored (an override, a merchant rule, etc.
+  // still says the OLD name underneath). Running this last means a rename
+  // takes effect immediately for every transaction already carrying the old
+  // name, including ones produced by any of the steps above.
+  var categorized = useMemo(function () {
+    if (!categoryRenames || Object.keys(categoryRenames).length === 0) return disabledApplied;
+    return disabledApplied.map(function (tx) {
+      var renamed = categoryRenames[tx.category];
+      if (!renamed) return tx;
+      return Object.assign({}, tx, { category: renamed });
+    });
+  }, [disabledApplied, categoryRenames]);
 
   var months = useMemo(function () {
     var set = {};
@@ -2440,7 +2536,7 @@ function SpendingPaceChart(props) {
 }
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
   // Lifted up to App (see there for why) so the selected month survives
   // switching to another tab and back.
   var selectedMonth = props.ovSelectedMonth, setSelectedMonth = props.onOvSelectedMonthChange;
@@ -2497,6 +2593,19 @@ function OverviewScreen(props) {
       // this, the page-level gesture's preventDefault() (below) fights with
       // the strip's own horizontal scroll and makes it feel stuck.
       if (monthStripRef.current && monthStripRef.current.contains(e.target)) {
+        startX = null;
+        return;
+      }
+      // Any open sheet (bulk-categorize picker, month/category filter,
+      // etc.) renders as a DOM descendant of this same element, even
+      // though it visually floats above the whole screen — so a touch
+      // meant to scroll inside the sheet still reaches this handler. If
+      // that gesture had any slight horizontal drift, lockedAxis could lock
+      // to 'horizontal' and call preventDefault(), silently blocking what
+      // was actually an attempt to scroll the sheet's own content. Bailing
+      // out here whenever a sheet is open removes this entirely as a
+      // possible cause.
+      if (document.querySelector('.sheet-overlay')) {
         startX = null;
         return;
       }
@@ -2912,9 +3021,13 @@ function OverviewScreen(props) {
     ),
     h(ScreenFooter),
 
+    // right: 78 (not 16) deliberately leaves room for the floating
+    // scroll-to-top circle (46px wide, sitting 18px from the edge — so it
+    // occupies up to 64px from the right edge) so the "Categorize" button
+    // is never partly covered by it when both are visible at once.
     selectMode && selectedCount > 0 ? h('div', {
       style: {
-        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 16, zIndex: 40,
+        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 78, zIndex: 40,
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
         boxShadow: '0 8px 24px rgba(' + cssVar('--shadow-rgb') + ', 0.2)',
         padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
@@ -2937,7 +3050,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
@@ -3072,7 +3185,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
   // Filter state is lifted up to App (see there for why) — these read/write
   // through props rather than their own useState, so the filters survive
   // switching to another tab and back.
@@ -3227,9 +3340,13 @@ function TransactionsScreen(props) {
         }),
     h(ScreenFooter),
 
+    // right: 78 (not 16) deliberately leaves room for the floating
+    // scroll-to-top circle (46px wide, sitting 18px from the edge — so it
+    // occupies up to 64px from the right edge) so the "Categorize" button
+    // is never partly covered by it when both are visible at once.
     selectMode && selectedCount > 0 ? h('div', {
       style: {
-        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 16, zIndex: 40,
+        position: 'fixed', bottom: 'calc(var(--nav-h) + var(--safe-bottom) + 12px)', left: 16, right: 78, zIndex: 40,
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
         boxShadow: '0 8px 24px rgba(' + cssVar('--shadow-rgb') + ', 0.2)',
         padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
@@ -3645,6 +3762,187 @@ function ReviewUncategorized(props) {
 // use local draft state and commit on blur/Enter rather than on every
 // keystroke, so a momentarily-invalid intermediate value (e.g. clearing the
 // field to retype it) doesn't immediately propagate as a 0 or NaN threshold.
+// Lists every standing merchant rule (fragment -> category, created from a
+// confirmed bulk-categorization) with a way to delete one. Deleting a rule
+// only removes the STANDING RULE itself — it never touches transactions
+// already categorized by it, since those already have their category
+// resolved; only FUTURE transactions matching that fragment would fall
+// back to the generic keyword rules (or Other) instead.
+// A small set of categories that can never be deleted, since other parts
+// of the app depend on their EXACT name to mean something specific:
+// 'Salary' and 'Investments' drive dedicated detection/splitting logic
+// elsewhere (salary recognition, invested vs. withdrawn), and 'Other' is
+// the universal fallback every deleted category's transactions land in —
+// deleting it would have nowhere left to fall back to. They can still be
+// renamed, just not removed.
+var PROTECTED_CATEGORIES = ['Other', 'Salary', 'Investments'];
+var HOUSING_RULE_CATEGORIES = ['Rent', 'Credit Card Payment', 'Utilities'];
+
+// Categories + per-category transaction counts, with delete (after
+// confirmation, with a guard against deleting a category the active
+// Housing transfer rule would just recreate next month) and rename.
+function CategoryManagementSection(props) {
+  var sortedCategories = useMemo(function () {
+    return props.categories.slice().sort(function (a, b) { return a.localeCompare(b); });
+  }, [props.categories]);
+  var deletingState = useState(null); // category name | null
+  var deleting = deletingState[0], setDeleting = deletingState[1];
+  var renamingState = useState(null); // category name | null
+  var renaming = renamingState[0], setRenaming = renamingState[1];
+  var renameDraftState = useState('');
+  var renameDraft = renameDraftState[0], setRenameDraft = renameDraftState[1];
+  var housingBlockedState = useState(null); // category name | null — shown instead of the confirm sheet
+  var housingBlocked = housingBlockedState[0], setHousingBlocked = housingBlockedState[1];
+
+  function startDelete(category) {
+    if (props.housingRuleEnabled && HOUSING_RULE_CATEGORIES.indexOf(category) !== -1) {
+      setHousingBlocked(category);
+      return;
+    }
+    setDeleting(category);
+  }
+
+  function startRename(category) {
+    setRenaming(category);
+    setRenameDraft(category);
+  }
+
+  function commitRename() {
+    props.onRename(renaming, renameDraft);
+    setRenaming(null);
+  }
+
+  return h('div', null,
+    h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
+      sortedCategories.map(function (category, i) {
+        var count = props.counts[category] || 0;
+        var isProtected = PROTECTED_CATEGORIES.indexOf(category) !== -1;
+        return h('div', {
+          key: category,
+          style: {
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+            padding: '12px 16px', borderBottom: i < sortedCategories.length - 1 ? '1px solid var(--border)' : 'none',
+          },
+        },
+          h('div', { style: { flex: 1, overflow: 'hidden' } },
+            h('div', { style: { fontSize: 13, color: 'var(--text)' } }, category),
+            h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, count + ' transaction' + (count === 1 ? '' : 's'))
+          ),
+          h('button', {
+            onClick: function () { startRename(category); },
+            className: 'btn-secondary', style: { fontSize: 11, padding: '6px 10px', flexShrink: 0 },
+          }, 'Rename'),
+          isProtected ? null : h('button', {
+            onClick: function () { startDelete(category); },
+            className: 'btn-secondary', style: { fontSize: 11, padding: '6px 10px', flexShrink: 0, color: 'var(--loss)' },
+          }, 'Delete')
+        );
+      })
+    ),
+
+    // Blocked-by-housing-rule explanation — shown INSTEAD of the normal
+    // confirm sheet, since deleting now would just have the rule recreate
+    // the category again next month, which would be confusing rather than
+    // a real deletion.
+    housingBlocked ? h(Sheet, { title: 'Can\u2019t delete ' + housingBlocked, onClose: function () { setHousingBlocked(null); } },
+      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.5 } },
+        h('strong', null, housingBlocked), ' is produced automatically by the Housing transfer rule, which is currently on. Deleting it now would just have the rule recreate it again next month.'),
+      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 16, lineHeight: 1.5 } },
+        'Turn the Housing transfer rule off first (further down this screen), then come back here to delete ', housingBlocked, '.'),
+      h('button', { className: 'btn-secondary', style: { width: '100%' }, onClick: function () { setHousingBlocked(null); } }, 'Got it')
+    ) : null,
+
+    // Delete confirmation — states the irreversible part plainly (every
+    // transaction under this category becomes Other) before committing.
+    deleting ? h(Sheet, { title: 'Delete ' + deleting + '?', onClose: function () { setDeleting(null); } },
+      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 8, lineHeight: 1.5 } },
+        'All ', h('strong', null, (props.counts[deleting] || 0) + ' transaction' + ((props.counts[deleting] || 0) === 1 ? '' : 's')),
+        ' currently under ', h('strong', null, deleting), ' will move to ', h('strong', null, 'Other'), '.'),
+      h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 } },
+        'This category won\u2019t be suggested again automatically. You can re-create it later by typing the same name in "+ New category", but transactions that moved to Other won\u2019t move back on their own.'),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        h('button', {
+          className: 'btn-primary', style: { width: '100%', background: 'var(--loss)' },
+          onClick: function () { props.onDelete(deleting); setDeleting(null); },
+        }, 'Delete category'),
+        h('button', { className: 'btn-secondary', style: { width: '100%' }, onClick: function () { setDeleting(null); } }, 'Cancel')
+      )
+    ) : null,
+
+    // Rename — a plain text input, committed on Save or Enter. Renaming to
+    // a name that already exists on another category simply merges the two
+    // (handled by the de-dupe step in allCategoriesCombined), which is
+    // reasonable default behavior rather than something that needs its own
+    // separate warning.
+    renaming ? h(Sheet, { title: 'Rename ' + renaming, onClose: function () { setRenaming(null); } },
+      h('input', {
+        type: 'text', value: renameDraft, autoFocus: true,
+        onChange: function (e) { setRenameDraft(e.target.value); },
+        onKeyDown: function (e) { if (e.key === 'Enter') commitRename(); },
+        style: {
+          width: '100%', fontSize: 14, padding: '10px 12px', borderRadius: 10, marginBottom: 14,
+          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+        },
+      }),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        h('button', { className: 'btn-primary', style: { width: '100%' }, onClick: commitRename }, 'Save'),
+        h('button', { className: 'btn-secondary', style: { width: '100%' }, onClick: function () { setRenaming(null); } }, 'Cancel')
+      )
+    ) : null
+  );
+}
+
+function MerchantRulesSection(props) {
+  var rules = props.merchantRules || {};
+  var fragments = useMemo(function () {
+    return Object.keys(rules).sort(function (a, b) { return a.localeCompare(b); });
+  }, [rules]);
+  var confirmingState = useState(null); // fragment string | null
+  var confirming = confirmingState[0], setConfirming = confirmingState[1];
+
+  if (fragments.length === 0) {
+    return h('p', { style: { fontSize: 12, color: 'var(--muted)' } },
+      'No standing rules yet — these are created automatically the first time you bulk-categorize a merchant with more than one transaction.');
+  }
+
+  return h('div', null,
+    h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
+      fragments.map(function (fragment, i) {
+        return h('div', {
+          key: fragment,
+          style: {
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+            padding: '12px 16px', borderBottom: i < fragments.length - 1 ? '1px solid var(--border)' : 'none',
+          },
+        },
+          h('div', { style: { flex: 1, overflow: 'hidden' } },
+            h('div', { style: { fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, fragment),
+            h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, '\u2192 ' + rules[fragment])
+          ),
+          h('button', {
+            onClick: function () { setConfirming(fragment); },
+            className: 'btn-secondary', style: { fontSize: 11, padding: '6px 12px', flexShrink: 0, color: 'var(--loss)' },
+          }, 'Delete')
+        );
+      })
+    ),
+    confirming ? h(Sheet, { title: 'Delete this rule?', onClose: function () { setConfirming(null); } },
+      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 8, lineHeight: 1.5 } },
+        'Stops automatically categorizing future transactions matching ', h('strong', null, '"' + confirming + '"'),
+        ' as ', h('strong', null, rules[confirming]), '.'),
+      h('p', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 } },
+        'Transactions already categorized this way keep their current category \u2014 only NEW matching transactions are affected.'),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        h('button', {
+          className: 'btn-primary', style: { width: '100%', background: 'var(--loss)' },
+          onClick: function () { props.onDelete(confirming); setConfirming(null); },
+        }, 'Delete rule'),
+        h('button', { className: 'btn-secondary', style: { width: '100%' }, onClick: function () { setConfirming(null); } }, 'Cancel')
+      )
+    ) : null
+  );
+}
+
 function HousingRuleSettings(props) {
   var rule = props.rule || DEFAULT_HOUSING_RULE;
   var draftState = useState(function () {
@@ -3738,7 +4036,7 @@ function HousingRuleSettings(props) {
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
 
   // The most recent real transaction date across everything stored — answers
   // "up to what date do I actually have data," distinct from the upload
@@ -3755,10 +4053,22 @@ function SettingsScreen(props) {
     // sharing the same merchant fragment, so finding one matching transaction
     // and calling it once is enough — no need to loop here ourselves.
     var match = props.transactions.find(function (tx) {
-      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount, props.merchantRules)) !== -1 && merchantFragment(tx.description) === fragment;
+      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount, props.merchantRules, props.disabledCategories)) !== -1 && merchantFragment(tx.description) === fragment;
     });
     if (match) props.onCategoryChange(match.id, category);
-  }, [props.transactions, props.onCategoryChange]);
+  }, [props.transactions, props.onCategoryChange, props.disabledCategories]);
+
+  // Per-category transaction counts, used by the "Categories" management
+  // section below — built from data.categorized (the fully resolved
+  // category, after manual overrides, merchant rules, the housing rule,
+  // disabledCategories, AND renames have all already been applied), so the
+  // count and name shown always match exactly what the rest of the app
+  // would show for that category right now.
+  var categoryCounts = useMemo(function () {
+    var counts = {};
+    data.categorized.forEach(function (tx) { counts[tx.category] = (counts[tx.category] || 0) + 1; });
+    return counts;
+  }, [data.categorized]);
 
   return h('div', { className: 'screen' },
     h('p', { className: 'section-title' }, 'Import data'),
@@ -3820,6 +4130,16 @@ function SettingsScreen(props) {
     h('p', { className: 'section-title' }, 'Housing transfer rule'),
     h(HousingRuleSettings, { rule: props.housingRule, onChange: props.onHousingRuleChange }),
 
+    h('p', { className: 'section-title' }, 'Categories'),
+    h(CategoryManagementSection, {
+      categories: props.categories, counts: categoryCounts,
+      onDelete: props.onDeleteCategory, onRename: props.onRenameCategory,
+      housingRuleEnabled: Boolean(props.housingRule && props.housingRule.enabled),
+    }),
+
+    h('p', { className: 'section-title' }, 'Automatic categorization rules'),
+    h(MerchantRulesSection, { merchantRules: props.merchantRules, onDelete: props.onDeleteMerchantRule }),
+
     h(ScreenFooter)
   );
 }
@@ -3867,6 +4187,11 @@ function App() {
 
   var housingRuleState = useState(function () { return loadHousingRule(); });
   var housingRule = housingRuleState[0], setHousingRule = housingRuleState[1];
+
+  var disabledCategoriesState = useState(function () { return loadDisabledCategories(); });
+  var disabledCategories = disabledCategoriesState[0], setDisabledCategories = disabledCategoriesState[1];
+  var categoryRenamesState = useState(function () { return loadCategoryRenames(); });
+  var categoryRenames = categoryRenamesState[0], setCategoryRenames = categoryRenamesState[1];
 
   // Lifted up from TransactionsScreen so the person's filter choices survive
   // switching to another tab and back — a screen component fully unmounts
@@ -3934,6 +4259,17 @@ function App() {
     var AXIS_LOCK_THRESHOLD = 10; // px before we decide this gesture is vertical, not horizontal
 
     function onTouchStart(e) {
+      // Any open sheet (the bulk-categorize picker, month/category filter
+      // pickers, etc.) renders as a DOM descendant of #main even though it
+      // visually floats above everything — so touches on it still bubble
+      // up and reach these listeners. Bailing out here means a touch
+      // intended for scrolling inside an open sheet is never also
+      // interpreted as a pull-to-refresh gesture on the page underneath.
+      if (document.querySelector('.sheet-overlay')) {
+        startX = null;
+        startY = null;
+        return;
+      }
       if (el.scrollTop <= 0) {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
@@ -4001,6 +4337,66 @@ function App() {
     setHousingRule(function (prev) {
       var next = Object.assign({}, prev, updates);
       saveHousingRule(next);
+      return next;
+    });
+  }, []);
+
+  // Deletes a category, built-in or custom alike — both are handled the
+  // same way (added to disabledCategories) rather than treating a custom
+  // category's deletion as "remove from the list" and a built-in one's as
+  // "suppress the keyword rule," since the END RESULT the person wants is
+  // identical either way: the category disappears, and every transaction
+  // under it becomes Other. If it was a custom category, it's also removed
+  // from customCategories so it doesn't linger there unused.
+  var handleDeleteCategory = useCallback(function (category) {
+    setDisabledCategories(function (prev) {
+      if (prev.indexOf(category) !== -1) return prev;
+      var next = prev.concat([category]);
+      saveDisabledCategories(next);
+      return next;
+    });
+    setCustomCategories(function (prev) {
+      if (prev.indexOf(category) === -1) return prev;
+      var next = prev.filter(function (c) { return c !== category; });
+      saveCustomCategories(next);
+      return next;
+    });
+  }, []);
+
+  // Renames a category by recording a translation (oldName -> newName)
+  // rather than rewriting every override/merchantRule that currently say
+  // the old name — see useLedgerData's final translation pass for why.
+  // If the category being renamed was itself already the TARGET of an
+  // earlier rename, that earlier entry is updated to point straight at the
+  // newest name instead of chaining two renames together.
+  var handleRenameCategory = useCallback(function (oldName, newName) {
+    var trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setCategoryRenames(function (prev) {
+      var next = {};
+      Object.keys(prev).forEach(function (k) {
+        next[k] = prev[k] === oldName ? trimmed : prev[k];
+      });
+      next[oldName] = trimmed;
+      saveCategoryRenames(next);
+      return next;
+    });
+    // If the renamed category was a custom one, update its stored name too
+    // so it doesn't show up twice (old name disabled-but-absent, new name
+    // present) in places that read customCategories directly.
+    setCustomCategories(function (prev) {
+      if (prev.indexOf(oldName) === -1) return prev;
+      var next = prev.map(function (c) { return c === oldName ? trimmed : c; });
+      saveCustomCategories(next);
+      return next;
+    });
+  }, []);
+
+  var handleDeleteMerchantRule = useCallback(function (fragment) {
+    setMerchantRules(function (prev) {
+      var next = Object.assign({}, prev);
+      delete next[fragment];
+      saveMerchantRules(next);
       return next;
     });
   }, []);
@@ -4190,13 +4586,21 @@ function App() {
         if (combined.indexOf(c) === -1) combined.push(c);
       });
     }
+    // Deleted categories never appear as a selectable option again, and a
+    // renamed one shows its NEW name in the list — both applied here so
+    // every categorize UI in the app reflects them automatically, the same
+    // single-source-of-truth reasoning as the alphabetical sort below.
+    combined = combined
+      .filter(function (c) { return disabledCategories.indexOf(c) === -1; })
+      .map(function (c) { return categoryRenames[c] || c; })
+      .filter(function (c, i, arr) { return arr.indexOf(c) === i; }); // de-dupe in case a rename collides with an existing name
     // Sorted alphabetically — every categorize UI in the app (the per-
     // transaction picker, both bulk pickers, Categorize merchants) reads
     // from this single combined list, so sorting it once here is enough
     // to keep all of them consistent rather than sorting separately in
     // each render spot.
     return combined.slice().sort(function (a, b) { return a.localeCompare(b); });
-  }, [customCategories, housingRule]);
+  }, [customCategories, housingRule, disabledCategories, categoryRenames]);
 
   var handleCreateCategory = useCallback(function (name) {
     var trimmed = name.trim();
@@ -4290,11 +4694,14 @@ function App() {
     txSearchText: txSearchText, onTxSearchTextChange: setTxSearchText,
     txMonthFilter: txMonthFilter, onTxMonthFilterChange: setTxMonthFilter,
     ovSelectedMonth: ovSelectedMonth, onOvSelectedMonthChange: setOvSelectedMonth,
+    disabledCategories: disabledCategories, categoryRenames: categoryRenames,
+    onDeleteCategory: handleDeleteCategory, onRenameCategory: handleRenameCategory,
+    onDeleteMerchantRule: handleDeleteMerchantRule, customCategories: customCategories,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
@@ -4330,15 +4737,22 @@ function App() {
           color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
         },
       }, pullState === 'checking' ? 'Checking for updates\u2026' : 'Release to check for updates') : null,
-      screenEl
+      screenEl,
+      // Rendered as a child of #main (right after screenEl, not as a
+      // top-level sibling of #main) — any sheet/picker a screen opens is
+      // ALSO a descendant of #main, and fixed-position elements only
+      // respect each other's z-index reliably when compared within the
+      // same stacking context. As a sibling of #main, this button was
+      // visually bleeding through on top of open sheets (z-index 50 vs
+      // the sheet's 110) regardless of the z-index values on paper.
+      h('button', {
+        className: 'scroll-top-btn' + (showScrollTop ? ' visible' : ''),
+        'aria-label': 'Scroll to top',
+        onClick: function () {
+          if (mainRef.current) mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+      }, '\u2191')
     ),
-    h('button', {
-      className: 'scroll-top-btn' + (showScrollTop ? ' visible' : ''),
-      'aria-label': 'Scroll to top',
-      onClick: function () {
-        if (mainRef.current) mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-      },
-    }, '\u2191'),
     h('nav', { className: 'bottomnav' },
       NAV_ITEMS.map(function (item) {
         return h('button', {
