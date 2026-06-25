@@ -149,19 +149,6 @@ button { font-family: var(--sans); }
 .sheet-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .sheet-body { overflow-y: auto; padding: 14px 20px; flex: 1; min-height: 0; }
 
-/* Full-screen variant for bulk-categorize: covers the ENTIRE viewport
-   (no max-height, no align-items: flex-end, nothing computed relative to
-   the bottom nav) — deliberately avoids the whole class of "does this
-   floating element's z-index actually win against that OTHER floating
-   element" problem by not sharing screen space with anything else at all. */
-.fullscreen-overlay { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; flex-direction: column; }
-.fullscreen-header {
-  padding: 16px 20px; padding-top: calc(16px + env(safe-area-inset-top, 0px));
-  border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
-  flex-shrink: 0; background: var(--bg);
-}
-.fullscreen-body { flex: 1; overflow-y: auto; padding: 14px 20px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
-
 .faq-q { width: 100%; text-align: left; background: none; border: none; padding: 14px 2px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; font-family: var(--sans); border-bottom: 1px solid var(--border); }
 .faq-a { padding: 0 2px 14px; font-size: 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
 
@@ -245,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.3';
+var APP_VERSION = '1.26.4';
 
 var CHANGELOG = [
+  { version: '1.26.4', notes: [
+    'Reconstruída a categorização em massa (Resumo, Transactions, e Categorize merchants) para usar exatamente a mesma estrutura comprovada do filtro de meses — a mesma folha, a mesma lista com scroll, sem o ecrã de tela inteira introduzido na versão anterior, que continuava a ter o mesmo problema. Confirmado com um teste de geometria real (não apenas leitura de código) antes desta entrega.',
+  ]},
   { version: '1.26.3', notes: [
     'Corrigida a causa real do scroll bloqueado na categorização em massa em tela inteira: os gestos de "puxar para atualizar" e "deslizar entre meses" continuavam ativos por baixo do novo ecrã de categorização (só reconheciam o formato antigo de folha), podendo bloquear o teu scroll dentro da lista de categorias mesmo com tudo o resto correto. Confirmado com testes de geometria reais antes e depois da correção.',
   ]},
@@ -2634,7 +2624,7 @@ function OverviewScreen(props) {
       // was actually an attempt to scroll the sheet's own content. Bailing
       // out here whenever a sheet is open removes this entirely as a
       // possible cause.
-      if (document.querySelector('.sheet-overlay') || document.querySelector('.fullscreen-overlay')) {
+      if (document.querySelector('.sheet-overlay')) {
         startX = null;
         return;
       }
@@ -3066,7 +3056,7 @@ function OverviewScreen(props) {
       h('button', { className: 'btn-primary', style: { fontSize: 12, padding: '8px 16px' }, onClick: function () { setBulkCategorizeOpen(true); } }, 'Categorize')
     ) : null,
 
-    bulkCategorizeOpen ? h(FullScreenCategoryPicker, {
+    bulkCategorizeOpen ? h(CategoryPickerSheet, {
       title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
       categories: props.categories || ALL_CATEGORIES,
       onCreateCategory: props.onCreateCategory,
@@ -3396,7 +3386,7 @@ function TransactionsScreen(props) {
       onClose: function () { setCategoryPickerOpen(false); },
     }) : null,
 
-    bulkCategorizeOpen ? h(FullScreenCategoryPicker, {
+    bulkCategorizeOpen ? h(CategoryPickerSheet, {
       title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
       categories: props.categories || ALL_CATEGORIES,
       onCreateCategory: props.onCreateCategory,
@@ -3428,58 +3418,13 @@ function TransactionsScreen(props) {
 // actually being respected against that OTHER floating element" bugs by
 // design: there is nothing else sharing the screen for it to lose a
 // stacking fight against.
-function FullScreenCategoryPicker(props) {
-  var creatingState = useState(false);
-  var creating = creatingState[0], setCreating = creatingState[1];
-  var newNameState = useState('');
-  var newName = newNameState[0], setNewName = newNameState[1];
-
-  function handleCreateAndSelect() {
-    if (!props.onCreateCategory) return;
-    var created = props.onCreateCategory(newName);
-    if (created) props.onSelect(created);
-  }
-
-  return h('div', { className: 'fullscreen-overlay' },
-    h('div', { className: 'fullscreen-header' },
-      h('span', { style: { fontSize: 15, fontWeight: 700, color: 'var(--text)' } }, props.title),
-      h('button', { className: 'icon-btn', onClick: props.onClose }, '\u2715')
-    ),
-    h('div', { className: 'fullscreen-body' },
-      creating ? h('div', { style: { display: 'flex', gap: 6, marginBottom: 14 } },
-        h('input', {
-          type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
-          onChange: function (e) { setNewName(e.target.value); },
-          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndSelect(); },
-          style: {
-            flex: 1, fontSize: 13, padding: '9px 12px', borderRadius: 8,
-            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-          },
-        }),
-        h('button', { onClick: handleCreateAndSelect, className: 'btn-secondary', style: { fontSize: 12, padding: '8px 14px' } }, 'Add')
-      ) : (props.onCreateCategory ? h('button', {
-        onClick: function () { setCreating(true); },
-        style: {
-          width: '100%', textAlign: 'left', fontSize: 13, padding: '10px 4px', marginBottom: 6,
-          border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-        },
-      }, '+ New category') : null),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-        props.categories.map(function (c) {
-          return h('button', {
-            key: c, onClick: function () { props.onSelect(c); },
-            style: {
-              width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              fontSize: 14, padding: '13px 4px', border: 'none', borderBottom: '1px solid var(--border)',
-              background: 'transparent', color: 'var(--text)', cursor: 'pointer',
-            },
-          }, c, h('span', { style: { color: 'var(--muted)', fontSize: 13 } }, '\u203a'));
-        })
-      )
-    )
-  );
-}
-
+// Mirrors MonthFilterSheet's structure exactly (same Sheet wrapper, same
+// maxHeight + overflowY list, same <div onClick> row pattern) rather than
+// the various other approaches tried before (a full-screen overlay, a
+// single-scroll-container sheet) — those were built on theories about WHY
+// the last item was unreachable that didn't hold up against a real device
+// report. MonthFilterSheet uses this exact shape and has never had this
+// problem, so this copies it directly instead of inventing another theory.
 function CategoryPickerSheet(props) {
   var creatingState = useState(false);
   var creating = creatingState[0], setCreating = creatingState[1];
@@ -3493,43 +3438,34 @@ function CategoryPickerSheet(props) {
   }
 
   return h(Sheet, { title: props.title, onClose: props.onClose },
-    creating ? h('div', { style: { display: 'flex', gap: 6, marginBottom: 14 } },
-      h('input', {
-        type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
-        onChange: function (e) { setNewName(e.target.value); },
-        onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndSelect(); },
-        style: {
-          flex: 1, fontSize: 13, padding: '9px 12px', borderRadius: 8,
-          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
-        },
-      }),
-      h('button', { onClick: handleCreateAndSelect, className: 'btn-secondary', style: { fontSize: 12, padding: '8px 14px' } }, 'Add')
-    ) : (props.onCreateCategory ? h('button', {
-      onClick: function () { setCreating(true); },
-      style: {
-        width: '100%', textAlign: 'left', fontSize: 13, padding: '10px 4px', marginBottom: 6,
-        border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
-      },
-    }, '+ New category') : null),
-    // Deliberately NOT a separate scrollable div with its own maxHeight —
-    // a second, nested overflow:auto container inside .sheet-body (which
-    // is already the correctly flex-sized scroll area for the whole sheet)
-    // caused mobile browsers to mishandle the touch gesture, trapping the
-    // last item(s) below the visibly-scrollable region with no way to
-    // reach them. The category list now scrolls as part of the SAME
-    // scroll container as the header button above it.
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '50vh', overflowY: 'auto' } },
       props.categories.map(function (c) {
-        return h('button', {
+        return h('div', {
           key: c, onClick: function () { props.onSelect(c); },
-          style: {
-            width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontSize: 13, padding: '11px 4px', border: 'none', borderBottom: '1px solid var(--border)',
-            background: 'transparent', color: 'var(--text)', cursor: 'pointer',
-          },
-        }, c, h('span', { style: { color: 'var(--muted)', fontSize: 13 } }, '\u203a'));
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 4px', cursor: 'pointer' },
+        },
+          h('span', { style: { fontSize: 13, color: 'var(--text)' } }, c),
+          h('span', { style: { color: 'var(--muted)', fontSize: 13 } }, '\u203a')
+        );
       })
-    )
+    ),
+    props.onCreateCategory ? (
+      creating ? h('div', { style: { display: 'flex', gap: 6 } },
+        h('input', {
+          type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
+          onChange: function (e) { setNewName(e.target.value); },
+          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndSelect(); },
+          style: {
+            flex: 1, fontSize: 13, padding: '9px 12px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        }),
+        h('button', { onClick: handleCreateAndSelect, className: 'btn-secondary', style: { fontSize: 12, padding: '8px 14px' } }, 'Add')
+      ) : h('button', {
+        onClick: function () { setCreating(true); },
+        className: 'btn-secondary', style: { width: '100%' },
+      }, '+ New category')
+    ) : null
   );
 }
 
@@ -4355,7 +4291,7 @@ function App() {
       // up and reach these listeners. Bailing out here means a touch
       // intended for scrolling inside an open sheet is never also
       // interpreted as a pull-to-refresh gesture on the page underneath.
-      if (document.querySelector('.sheet-overlay') || document.querySelector('.fullscreen-overlay')) {
+      if (document.querySelector('.sheet-overlay')) {
         startX = null;
         startY = null;
         return;
