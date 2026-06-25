@@ -232,9 +232,14 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.0';
+var APP_VERSION = '1.27.1';
 
 var CHANGELOG = [
+  { version: '1.27.1', notes: [
+    'As palavras-chave das regras incorporadas (ex: Restaurants, Fuel, Groceries) tornam-se editáveis: toca numa categoria em "Categories" e, em "Automatic categorization rules", podes adicionar novas palavras-chave ou remover qualquer uma das existentes, incluindo as originais',
+    '4 regras com padrões mais complexos do que uma lista de palavras simples (Income / Transfers In, a regra específica de Mbway da Housing, Card Purchase (uncategorized), Transfer Out) continuam só visíveis, não editáveis por esta interface',
+    'O valor mínimo para deteção de Salário passa a ser ajustável, tal como os limites da Housing transfer rule — disponível ao filtrar por "Salary" na mesma secção',
+  ]},
   { version: '1.27.0', notes: [
     'Corrigida a deteção de regras: Salary, Rent, Credit Card Payment e Utilities não apareciam com nenhuma regra associada porque a sua lógica não vive na lista de regras de palavra-chave normal — Salary tem uma verificação especial (remetente + valor), e as outras três vêm da "Housing transfer rule". Agora aparecem corretamente.',
     'Tocar numa categoria em "Categories" filtra a lista de "Automatic categorization rules" abaixo, mostrando as regras automáticas dessa categoria — tanto as standing rules criadas por "Apply to all" como, quando existirem, as palavras-chave reais das regras incorporadas no código (extraídas diretamente da lógica real, nunca uma descrição separada que possa ficar desatualizada). Tocar na mesma categoria outra vez limpa o filtro.',
@@ -557,6 +562,8 @@ var FAQ_ITEMS = [
     a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
+  { q: 'Como edito as palavras-chave de uma categoria incorporada (ex: Restaurants, Fuel)?',
+    a: 'Em Definições → "Categories", toca na categoria que queres editar. Em "Automatic categorization rules" (mais abaixo), aparecem as palavras-chave dessa categoria, cada uma com um "×" para remover. Podes adicionar novas palavras-chave no campo abaixo da lista. Isto funciona para a maioria das categorias incorporadas, incluindo as originais — as alterações ficam guardadas e podes sempre voltar a adicionar uma palavra-chave que removeste. 4 categorias (Income / Transfers In, a regra específica de Mbway da Housing, Card Purchase (uncategorized), Transfer Out) usam padrões mais complexos do que uma lista de palavras e não são editáveis por aqui, só visíveis para referência. Ao filtrar por "Salary", em vez de palavras-chave vês o valor mínimo necessário para uma transferência ser reconhecida como salário — também ajustável aí.' },
   { q: 'Como funciona a "Housing transfer rule"?',
     a: 'Em Defini\u00e7\u00f5es, ativa esta regra para dividir automaticamente as transfer\u00eancias para a mesma pessoa (ex: o teu companheiro/a de casa) em tr\u00eas categorias, com base no valor: a maior do m\u00eas (entre o limite de Credit Card e o de Rent) fica Rent; valores m\u00e9dios ficam Credit Card Payment; valores pequenos ficam Utilities. Se houver uma transfer\u00eancia acima do limite de Rent, ou uma segunda na faixa de Rent no mesmo m\u00eas, fica sem categoria para revisares em "Categorize merchants" \u2014 nunca \u00e9 adivinhada automaticamente. Os limites (100\u20ac, 500\u20ac, 600\u20ac por defeito) podem ser ajustados em Defini\u00e7\u00f5es. Este destinat\u00e1rio fica exclu\u00eddo do "Apply to all" em massa, j\u00e1 que uma \u00fanica categoria para todas as transfer\u00eancias anularia o prop\u00f3sito da regra \u2014 corrige cada transa\u00e7\u00e3o individualmente se precisares.' },
   { q: 'O que faz o botão "Credits" no Resumo?',
@@ -678,34 +685,93 @@ function parseCGDCsv(text) {
 
 // --- Categorization ------------------------------------------------------
 
-var RULES = [
-  { category: 'Tolls & Travel', test: function (d) { return /VIA VERDE/i.test(d); } },
+// Each entry with a `keywords` array is rendered as user-editable in
+// Settings → Categories (tap a category to see/edit its keywords). The
+// few entries WITHOUT `keywords` (Income / Transfers In, the specific
+// Housing/Mbway-rent pattern, Card Purchase (uncategorized), Transfer Out)
+// use a structural pattern — a string prefix or a character class — that
+// can't be represented as a flat list of literal words, so they keep a
+// plain regex `test` function and are shown as read-only/built-in only.
+//
+// For an editable entry, `test` is generated fresh from `keywords` (see
+// buildKeywordRegex below) every time keywords are loaded/changed, rather
+// than being a fixed function — this is what lets a person's additions or
+// removals actually take effect without needing to edit this array's code.
+var BASE_RULES = [
+  { category: 'Tolls & Travel', keywords: ['VIA VERDE'] },
   // Specific recurring Mbway transfer that's actually rent/housing, not a
-  // generic P2P transfer — must be checked before the generic Mbway rule below.
+  // generic P2P transfer — must be checked before the generic Mbway rule
+  // below. Not a flat keyword (needs the masked-digit character class), so
+  // not editable through the keyword UI.
   { category: 'Housing', test: function (d) { return /Trf Mbway 914[X\d]{3}162/i.test(d); } },
-  { category: 'Transfers (P2P)', test: function (d) { return /Trf Mbway/i.test(d); } },
+  { category: 'Transfers (P2P)', keywords: ['Trf Mbway'] },
   { category: 'Income / Transfers In', test: function (d) { return /^TFI /i.test(d); } },
-  { category: 'Investments', test: function (d) { return /Trading 212/i.test(d); } },
-  { category: 'Bank Fees', test: function (d) { return /COMISSAO|MANUT CONTA/i.test(d); } },
-  { category: 'Cash Withdrawal', test: function (d) { return /LEVANTAMENTO|TRAN DEBITO ATM/i.test(d); } },
-  { category: 'Subscriptions', test: function (d) { return /SPOTIFY|AMAZON PRIME|NETFLIX/i.test(d); } },
-  { category: 'Shopping', test: function (d) { return /AMAZON|SKRILL/i.test(d); } },
-  { category: 'Rideshare', test: function (d) { return /UBER|BOLT\.EU/i.test(d); } },
-  { category: 'Fuel', test: function (d) { return /REPSOL|BP CANE|BP MEAL|MOEVE/i.test(d); } },
-  { category: 'Pharmacy / Health', test: function (d) { return /FARMACIA|MEDIS/i.test(d); } },
-  { category: 'Groceries', test: function (d) { return /CONTINE|ALDI|AUCHAN/i.test(d); } },
-  { category: 'Restaurants', test: function (d) { return /REST |RESTAURANTE|REST\.|CAFE |CAFETARIA|CAFÉ|TROPICA|TASCA|MARISQUEIRA|CERVEJARIA|PIZZA|HAMB |PADARIA|PASTELARIA|CHURRASC|GRILL|BISTRO|TAPAS|SUSHI|BURGER|KEBAB|GELATARIA|CONFEITARIA|SNACK|TASQUINHA|MARISCO|BRASA|PETISC|TABERNA|ESPLANADA/i.test(d); } },
-  { category: 'Housing', test: function (d) { return /CONDOMINIO/i.test(d); } },
+  { category: 'Investments', keywords: ['Trading 212'] },
+  { category: 'Bank Fees', keywords: ['COMISSAO', 'MANUT CONTA'] },
+  { category: 'Cash Withdrawal', keywords: ['LEVANTAMENTO', 'TRAN DEBITO ATM'] },
+  { category: 'Subscriptions', keywords: ['SPOTIFY', 'AMAZON PRIME', 'NETFLIX'] },
+  { category: 'Shopping', keywords: ['AMAZON', 'SKRILL'] },
+  { category: 'Rideshare', keywords: ['UBER', 'BOLT.EU'] },
+  { category: 'Fuel', keywords: ['REPSOL', 'BP CANE', 'BP MEAL', 'MOEVE'] },
+  { category: 'Pharmacy / Health', keywords: ['FARMACIA', 'MEDIS'] },
+  { category: 'Groceries', keywords: ['CONTINE', 'ALDI', 'AUCHAN'] },
+  { category: 'Restaurants', keywords: ['REST ', 'RESTAURANTE', 'REST.', 'CAFE ', 'CAFETARIA', 'CAFÉ', 'TROPICA', 'TASCA', 'MARISQUEIRA', 'CERVEJARIA', 'PIZZA', 'HAMB ', 'PADARIA', 'PASTELARIA', 'CHURRASC', 'GRILL', 'BISTRO', 'TAPAS', 'SUSHI', 'BURGER', 'KEBAB', 'GELATARIA', 'CONFEITARIA', 'SNACK', 'TASQUINHA', 'MARISCO', 'BRASA', 'PETISC', 'TABERNA', 'ESPLANADA'] },
+  { category: 'Housing', keywords: ['CONDOMINIO'] },
   { category: 'Card Purchase (uncategorized)', test: function (d) { return /^COMPRAS C\.DEB|^COMPRA /i.test(d); } },
   { category: 'Transfer Out', test: function (d) { return /^TRF /i.test(d); } },
 ];
+
+// Escapes a literal keyword for safe use inside a regex — without this,
+// a keyword containing characters like "." (e.g. "BOLT.EU" or "REST.")
+// would have that character match ANY character instead of a literal dot,
+// silently widening what the rule matches.
+function escapeRegexLiteral(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Builds the same kind of `test` function BASE_RULES' literal entries used
+// to have hardcoded, but from a (possibly person-edited) keyword array —
+// an OR of escaped literals, case-insensitive, exactly matching the
+// original rules' semantics.
+function buildKeywordRegex(keywords) {
+  if (!keywords || keywords.length === 0) return /(?:)/; // never matches anything meaningful — an empty OR
+  var pattern = keywords.map(escapeRegexLiteral).join('|');
+  return new RegExp(pattern, 'i');
+}
+
+// Combines BASE_RULES with the person's saved keyword overrides into the
+// actual rule list `autoCategory` uses. Order is preserved exactly as
+// BASE_RULES defines it — only the editable entries' keyword lists (and
+// therefore their `test` function) change; entries without `keywords`
+// (the 4 structural-pattern rules) pass through untouched.
+//
+// `overrides` is keyed by category name: { [category]: { added: [...],
+// removed: [...] } }. `removed` entries are filtered out of the base
+// keyword list, then `added` entries are appended — both compared
+// case-insensitively so a removal reliably matches regardless of how the
+// person typed the original casing back.
+function buildEffectiveRules(overrides) {
+  overrides = overrides || {};
+  return BASE_RULES.map(function (rule) {
+    if (!rule.keywords) return rule; // structural-pattern rule, passed through as-is
+    var override = overrides[rule.category];
+    var keywords = rule.keywords;
+    if (override) {
+      var removedLower = (override.removed || []).map(function (k) { return k.toLowerCase(); });
+      keywords = keywords.filter(function (k) { return removedLower.indexOf(k.toLowerCase()) === -1; });
+      keywords = keywords.concat(override.added || []);
+    }
+    var regex = buildKeywordRegex(keywords);
+    return { category: rule.category, keywords: keywords, test: function (d) { return regex.test(d); } };
+  });
+}
 
 // Categories that are negative cash flow but represent savings/investment
 // moves rather than spending — excluded from "spent" totals and the
 // spending donut, but still fully visible in the transaction list.
 var NON_SPENDING_CATEGORIES = ['Investments'];
 
-var ALL_CATEGORIES = RULES.map(function (r) { return r.category; })
+var ALL_CATEGORIES = BASE_RULES.map(function (r) { return r.category; })
   .filter(function (c, i, arr) { return arr.indexOf(c) === i; })
   .concat(['Salary', 'Other'])
   .sort(function (a, b) { return a.localeCompare(b); });
@@ -725,8 +791,9 @@ function merchantFragment(description) {
 var SALARY_SENDER_PATTERN = /TFI JOANA FILIPA TAVA/i;
 var SALARY_MIN_AMOUNT = 1500;
 
-function autoCategory(description, amount, merchantRules, disabledCategories) {
-  if (typeof amount === 'number' && amount >= SALARY_MIN_AMOUNT && SALARY_SENDER_PATTERN.test(description)) {
+function autoCategory(description, amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount) {
+  var minAmount = typeof salaryMinAmount === 'number' ? salaryMinAmount : SALARY_MIN_AMOUNT;
+  if (typeof amount === 'number' && amount >= minAmount && SALARY_SENDER_PATTERN.test(description)) {
     return 'Salary';
   }
   // A standing rule from a past bulk-categorization takes priority over the
@@ -740,14 +807,15 @@ function autoCategory(description, amount, merchantRules, disabledCategories) {
       return merchantResult;
     }
   }
-  for (var i = 0; i < RULES.length; i++) {
-    if (RULES[i].test(description)) {
+  var rules = effectiveRules || buildEffectiveRules();
+  for (var i = 0; i < rules.length; i++) {
+    if (rules[i].test(description)) {
       // A deleted built-in category falls through to the NEXT matching
       // rule (or eventually 'Other') rather than stopping here — the
       // person chose to suppress this specific category, not to make this
       // transaction unmatched by every later rule too.
-      if (disabledCategories && disabledCategories.indexOf(RULES[i].category) !== -1) continue;
-      return RULES[i].category;
+      if (disabledCategories && disabledCategories.indexOf(rules[i].category) !== -1) continue;
+      return rules[i].category;
     }
   }
   return 'Other';
@@ -908,6 +976,8 @@ var LAST_UPLOAD_KEY = 'ledger:last-upload-at';
 var HOUSING_RULE_KEY = 'ledger:housing-transfer-rule';
 var DISABLED_CATEGORIES_KEY = 'ledger:disabled-categories';
 var CATEGORY_RENAMES_KEY = 'ledger:category-renames';
+var KEYWORD_OVERRIDES_KEY = 'ledger:keyword-overrides';
+var SALARY_MIN_AMOUNT_KEY = 'ledger:salary-min-amount';
 
 function loadStoredTransactions() {
   try {
@@ -1101,6 +1171,40 @@ function loadCategoryRenames() {
 
 function saveCategoryRenames(renames) {
   localStorage.setItem(CATEGORY_RENAMES_KEY, JSON.stringify(renames));
+}
+
+// { [category]: { added: [...], removed: [...] } } — see buildEffectiveRules
+// above for how this combines with BASE_RULES' default keywords.
+function loadKeywordOverrides() {
+  try {
+    var raw = localStorage.getItem(KEYWORD_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveKeywordOverrides(overrides) {
+  localStorage.setItem(KEYWORD_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// The minimum transaction amount (paired with SALARY_SENDER_PATTERN) used
+// to recognize a salary deposit vs. a smaller, more frequent transfer from
+// the same sender — editable in Settings the same way the Housing transfer
+// rule's amount thresholds are, since this is also just a number someone
+// might need to adjust over time (e.g. if salary itself changes).
+function loadSalaryMinAmount() {
+  try {
+    var raw = localStorage.getItem(SALARY_MIN_AMOUNT_KEY);
+    var parsed = raw ? parseFloat(raw) : NaN;
+    return isFinite(parsed) && parsed > 0 ? parsed : SALARY_MIN_AMOUNT;
+  } catch (e) {
+    return SALARY_MIN_AMOUNT;
+  }
+}
+
+function saveSalaryMinAmount(amount) {
+  localStorage.setItem(SALARY_MIN_AMOUNT_KEY, String(amount));
 }
 
 // Builds a regex from the configured pattern string. CGD masks the middle
@@ -2132,13 +2236,22 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames) {
+function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount) {
+  // Built once per render (memoized on keywordOverrides itself, which only
+  // changes when the person actually edits a category's keywords in
+  // Settings) rather than once per transaction — autoCategory() is called
+  // for every transaction, so rebuilding the regexes inside that loop
+  // would multiply the cost by the transaction count for no reason.
+  var effectiveRules = useMemo(function () {
+    return buildEffectiveRules(keywordOverrides);
+  }, [keywordOverrides]);
+
   var baseCategorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       var monthOverride = monthOverrides ? monthOverrides[tx.id] : null;
       return Object.assign({}, tx, {
-        category: override || autoCategory(tx.description, tx.amount, merchantRules, disabledCategories),
+        category: override || autoCategory(tx.description, tx.amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount),
         isOverride: Boolean(override),
         // The real bank date is untouched — this only changes which month
         // a transaction is grouped into for totals and charts, e.g. a
@@ -2148,7 +2261,7 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
         hasMonthOverride: Boolean(monthOverride),
       });
     });
-  }, [transactions, overrides, merchantRules, monthOverrides, disabledCategories]);
+  }, [transactions, overrides, merchantRules, monthOverrides, disabledCategories, effectiveRules, salaryMinAmount]);
 
   // A second pass, separate from the per-transaction logic above, since this
   // rule needs to see every transaction in a month before it can decide any
@@ -2574,7 +2687,7 @@ function SpendingPaceChart(props) {
 }
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
   // Lifted up to App (see there for why) so the selected month survives
   // switching to another tab and back.
   var selectedMonth = props.ovSelectedMonth, setSelectedMonth = props.onOvSelectedMonthChange;
@@ -3107,7 +3220,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
@@ -3242,7 +3355,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
   // Filter state is lifted up to App (see there for why) — these read/write
   // through props rather than their own useState, so the filters survive
   // switching to another tab and back.
@@ -3889,7 +4002,7 @@ function CategoryManagementSection(props) {
   // logic deciding them, it just isn't a RULES entry.
   var hardcodedRuleCounts = useMemo(function () {
     var counts = {};
-    RULES.forEach(function (r) { counts[r.category] = (counts[r.category] || 0) + 1; });
+    BASE_RULES.forEach(function (r) { counts[r.category] = (counts[r.category] || 0) + 1; });
     counts['Salary'] = (counts['Salary'] || 0) + 1;
     if (props.housingRuleEnabled) {
       ['Rent', 'Credit Card Payment', 'Utilities'].forEach(function (c) {
@@ -4045,22 +4158,52 @@ function MerchantRulesSection(props) {
     return all.filter(function (f) { return rules[f] === props.filterCategory; });
   }, [rules, props.filterCategory]);
 
-  // Built-in rules matching the active filter — RULES entries directly,
-  // plus the two special-cased mechanisms (Salary, the Housing transfer
-  // rule's three categories) that don't live in RULES at all and so need
-  // their own plain-language description instead of an extracted pattern.
-  var matchingBuiltInRules = useMemo(function () {
+  // The editable rule entry for the active filter category, if it has one
+  // (entries without a `keywords` array — the 4 structural-pattern rules —
+  // have no editable keyword list at all, only a fixed regex).
+  var editableRule = useMemo(function () {
+    if (!props.filterCategory) return null;
+    var effectiveRules = buildEffectiveRules(props.keywordOverrides);
+    return effectiveRules.find(function (r) { return r.category === props.filterCategory && r.keywords; }) || null;
+  }, [props.filterCategory, props.keywordOverrides]);
+
+  // Whether this category's matching logic is one of the two mechanisms
+  // that don't use a keyword list AT ALL (Salary's sender+amount check, or
+  // the Housing transfer rule's per-month amount thresholds) — shown as a
+  // plain-language description instead of editable keywords, since there's
+  // nothing here to add/remove a literal word from.
+  var isSalaryFilter = props.filterCategory === 'Salary';
+  var isHousingRuleFilter = ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1;
+
+  // Structural built-in rules matching the filter — entries with no
+  // `keywords` array at all (a fixed regex using a prefix anchor or
+  // character class, not a flat OR of literal words). These are shown for
+  // visibility but can't be edited from this screen.
+  var structuralRules = useMemo(function () {
     if (!props.filterCategory) return [];
-    var matches = RULES.filter(function (r) { return r.category === props.filterCategory; })
+    return BASE_RULES.filter(function (r) { return r.category === props.filterCategory && !r.keywords; })
       .map(function (r) { return extractRulePattern(r.test); });
-    if (props.filterCategory === 'Salary') {
-      matches.push('Sender matches "TFI JOANA FILIPA TAVA" AND amount \u2265 ' + SALARY_MIN_AMOUNT + '\u20ac');
-    }
-    if (['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1) {
-      matches.push('Decided by the Housing transfer rule\u2019s amount thresholds each month (see that section above), not a fixed keyword');
-    }
-    return matches;
   }, [props.filterCategory]);
+
+  var newKeywordState = useState('');
+  var newKeyword = newKeywordState[0], setNewKeyword = newKeywordState[1];
+  var salaryDraftState = useState(function () { return String(props.salaryMinAmount || SALARY_MIN_AMOUNT); });
+  var salaryDraft = salaryDraftState[0], setSalaryDraft = salaryDraftState[1];
+
+  function handleAddKeywordClick() {
+    if (!newKeyword.trim() || !props.filterCategory) return;
+    props.onAddKeyword(props.filterCategory, newKeyword);
+    setNewKeyword('');
+  }
+
+  function handleSalaryBlur() {
+    var num = parseFloat(salaryDraft);
+    if (!isFinite(num) || num <= 0) {
+      setSalaryDraft(String(props.salaryMinAmount || SALARY_MIN_AMOUNT));
+      return;
+    }
+    props.onSalaryMinAmountChange(num);
+  }
 
   var confirmingState = useState(null); // fragment string | null
   var confirming = confirmingState[0], setConfirming = confirmingState[1];
@@ -4076,15 +4219,84 @@ function MerchantRulesSection(props) {
       h('button', { onClick: props.onClearFilter, className: 'btn-secondary', style: { fontSize: 11, padding: '5px 10px' } }, 'Clear')
     ) : null,
 
-    matchingBuiltInRules.length > 0 ? h('div', { className: 'card', style: { marginBottom: 12, padding: 0, overflow: 'hidden' } },
-      matchingBuiltInRules.map(function (pattern, i) {
+    // Editable keyword chips — only for categories whose built-in rule is
+    // a plain keyword list (most of them). Each chip removes itself on
+    // tap; a text field below adds a new one.
+    editableRule ? h('div', { className: 'card', style: { marginBottom: 12, padding: 12 } },
+      h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 8 } }, 'Built-in rule \u2014 keywords (tap \u00d7 to remove)'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 } },
+        editableRule.keywords.map(function (kw) {
+          return h('span', {
+            key: kw,
+            style: {
+              display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--mono)',
+              padding: '5px 6px 5px 10px', borderRadius: 8, background: 'var(--surface2)', color: 'var(--text)',
+            },
+          },
+            kw,
+            h('button', {
+              onClick: function () { props.onRemoveKeyword(props.filterCategory, kw); },
+              style: { border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 },
+              'aria-label': 'Remove ' + kw,
+            }, '\u00d7')
+          );
+        })
+      ),
+      h('div', { style: { display: 'flex', gap: 6 } },
+        h('input', {
+          type: 'text', value: newKeyword, placeholder: 'Add keyword\u2026',
+          onChange: function (e) { setNewKeyword(e.target.value); },
+          onKeyDown: function (e) { if (e.key === 'Enter') handleAddKeywordClick(); },
+          style: {
+            flex: 1, fontSize: 12, padding: '7px 10px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        }),
+        h('button', { onClick: handleAddKeywordClick, className: 'btn-secondary', style: { fontSize: 11, padding: '7px 12px' } }, 'Add')
+      )
+    ) : null,
+
+    // Salary's threshold — editable the same way the Housing transfer
+    // rule's amount thresholds are, since it's also just a number that
+    // might need adjusting over time.
+    isSalaryFilter ? h('div', { className: 'card', style: { marginBottom: 12, padding: 12 } },
+      h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 8 } }, 'Built-in rule \u2014 sender and minimum amount'),
+      h('div', { style: { fontSize: 12, color: 'var(--text)', marginBottom: 10 } }, 'Sender matches "TFI JOANA FILIPA TAVA"'),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+        h('span', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Minimum amount'),
+        h('span', { style: { fontSize: 13, color: 'var(--muted)' } }, '\u20ac'),
+        h('input', {
+          type: 'number', inputMode: 'decimal', value: salaryDraft,
+          onChange: function (e) { setSalaryDraft(e.target.value); },
+          onBlur: handleSalaryBlur,
+          onKeyDown: function (e) { if (e.key === 'Enter') handleSalaryBlur(); },
+          style: {
+            width: 90, fontSize: 13, padding: '6px 8px', borderRadius: 8, textAlign: 'right',
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+            fontFamily: 'var(--mono)',
+          },
+        })
+      )
+    ) : null,
+
+    // Housing transfer rule categories — no keywords to edit at all, since
+    // these are decided by amount thresholds configured in that section.
+    isHousingRuleFilter ? h('div', { className: 'card', style: { marginBottom: 12, padding: 12 } },
+      h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 4 } }, 'Built-in rule'),
+      h('div', { style: { fontSize: 12, color: 'var(--text)', lineHeight: 1.5 } },
+        'Decided by the Housing transfer rule\u2019s amount thresholds each month (see that section above), not a fixed keyword.')
+    ) : null,
+
+    // Structural built-in rules (a fixed prefix/character-class pattern,
+    // not a flat keyword list) — shown read-only, since there's no list of
+    // literal words here to add/remove from.
+    structuralRules.length > 0 ? h('div', { className: 'card', style: { marginBottom: 12, padding: 0, overflow: 'hidden' } },
+      structuralRules.map(function (pattern, i) {
         return h('div', {
           key: i,
-          style: {
-            padding: '12px 16px', borderBottom: i < matchingBuiltInRules.length - 1 ? '1px solid var(--border)' : 'none',
-          },
+          style: { padding: '12px 16px', borderBottom: i < structuralRules.length - 1 ? '1px solid var(--border)' : 'none' },
         },
-          h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 2 } }, 'Built-in rule'),
+          h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 2 } }, 'Built-in rule (not editable here)'),
           h('div', { style: { fontSize: 12, color: 'var(--text)', fontFamily: 'var(--mono)' } }, pattern)
         );
       })
@@ -4092,7 +4304,7 @@ function MerchantRulesSection(props) {
 
     fragments.length === 0 ? h('p', { style: { fontSize: 12, color: 'var(--muted)' } },
       props.filterCategory
-        ? 'No standing rules for this category.' + (matchingBuiltInRules.length === 0 ? ' No built-in rules either.' : '')
+        ? 'No standing rules for this category.' + (!editableRule && !isSalaryFilter && !isHousingRuleFilter && structuralRules.length === 0 ? ' No built-in rules either.' : '')
         : 'No standing rules yet — these are created automatically the first time you bulk-categorize a merchant with more than one transaction.'
     ) : h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
       fragments.map(function (fragment, i) {
@@ -4224,7 +4436,7 @@ function HousingRuleSettings(props) {
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
 
   // Which category's rules to show in "Automatic categorization rules"
   // below — tapping a category row in "Categories" sets this, filtering
@@ -4242,15 +4454,19 @@ function SettingsScreen(props) {
     return latest;
   }, [props.transactions]);
 
+  var effectiveRulesForBulkAssign = useMemo(function () {
+    return buildEffectiveRules(props.keywordOverrides);
+  }, [props.keywordOverrides]);
+
   var handleBulkAssign = useCallback(function (fragment, category) {
     // The central onCategoryChange handler already tags every transaction
     // sharing the same merchant fragment, so finding one matching transaction
     // and calling it once is enough — no need to loop here ourselves.
     var match = props.transactions.find(function (tx) {
-      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount, props.merchantRules, props.disabledCategories)) !== -1 && merchantFragment(tx.description) === fragment;
+      return UNCATEGORIZED_BUCKETS.indexOf(autoCategory(tx.description, tx.amount, props.merchantRules, props.disabledCategories, effectiveRulesForBulkAssign)) !== -1 && merchantFragment(tx.description) === fragment;
     });
     if (match) props.onCategoryChange(match.id, category);
-  }, [props.transactions, props.onCategoryChange, props.disabledCategories]);
+  }, [props.transactions, props.onCategoryChange, props.disabledCategories, effectiveRulesForBulkAssign]);
 
   // Per-category transaction counts, used by the "Categories" management
   // section below — built from data.categorized (the fully resolved
@@ -4336,6 +4552,8 @@ function SettingsScreen(props) {
     h(MerchantRulesSection, {
       merchantRules: props.merchantRules, onDelete: props.onDeleteMerchantRule,
       filterCategory: ruleFilterCategory, onClearFilter: function () { setRuleFilterCategory(null); },
+      keywordOverrides: props.keywordOverrides, onAddKeyword: props.onAddKeyword, onRemoveKeyword: props.onRemoveKeyword,
+      salaryMinAmount: props.salaryMinAmount, onSalaryMinAmountChange: props.onSalaryMinAmountChange,
     }),
 
     h(ScreenFooter)
@@ -4390,6 +4608,10 @@ function App() {
   var disabledCategories = disabledCategoriesState[0], setDisabledCategories = disabledCategoriesState[1];
   var categoryRenamesState = useState(function () { return loadCategoryRenames(); });
   var categoryRenames = categoryRenamesState[0], setCategoryRenames = categoryRenamesState[1];
+  var keywordOverridesState = useState(function () { return loadKeywordOverrides(); });
+  var keywordOverrides = keywordOverridesState[0], setKeywordOverrides = keywordOverridesState[1];
+  var salaryMinAmountState = useState(function () { return loadSalaryMinAmount(); });
+  var salaryMinAmount = salaryMinAmountState[0], setSalaryMinAmount = salaryMinAmountState[1];
 
   // Lifted up from TransactionsScreen so the person's filter choices survive
   // switching to another tab and back — a screen component fully unmounts
@@ -4631,6 +4853,56 @@ function App() {
       saveMerchantRules(next);
       return next;
     });
+  }, []);
+
+  // Adds a keyword to a category's editable rule. Case is kept exactly as
+  // typed (the matching itself is case-insensitive either way) so the
+  // person sees back what they entered.
+  var handleAddKeyword = useCallback(function (category, keyword) {
+    var trimmed = keyword.trim();
+    if (!trimmed) return;
+    setKeywordOverrides(function (prev) {
+      var existing = prev[category] || { added: [], removed: [] };
+      var removedLower = (existing.removed || []).map(function (k) { return k.toLowerCase(); });
+      var nextRemoved = existing.removed || [];
+      var wasRemovedDefault = removedLower.indexOf(trimmed.toLowerCase()) !== -1;
+      if (wasRemovedDefault) {
+        nextRemoved = nextRemoved.filter(function (k) { return k.toLowerCase() !== trimmed.toLowerCase(); });
+      }
+      // If this keyword was previously removed (one of the ORIGINAL
+      // defaults), adding it back un-removes it and stops there — it's
+      // already going to appear via BASE_RULES once unremoved, so also
+      // putting it in `added` would show it twice in the keyword list.
+      // Only keywords that were never a default get appended to `added`.
+      var nextAdded = wasRemovedDefault ? (existing.added || []) : (existing.added || []).concat([trimmed]);
+      var next = Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
+      saveKeywordOverrides(next);
+      return next;
+    });
+  }, []);
+
+  // Removes a keyword from a category's editable rule — works whether the
+  // keyword came from BASE_RULES' defaults (added to `removed`) or was
+  // itself something the person had added earlier (filtered out of
+  // `added` directly, since there's no need to separately "remove" a
+  // keyword that was never a default in the first place).
+  var handleRemoveKeyword = useCallback(function (category, keyword) {
+    setKeywordOverrides(function (prev) {
+      var existing = prev[category] || { added: [], removed: [] };
+      var nextAdded = (existing.added || []).filter(function (k) { return k.toLowerCase() !== keyword.toLowerCase(); });
+      var wasInAdded = nextAdded.length !== (existing.added || []).length;
+      var nextRemoved = existing.removed || [];
+      if (!wasInAdded) nextRemoved = nextRemoved.concat([keyword]);
+      var next = Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
+      saveKeywordOverrides(next);
+      return next;
+    });
+  }, []);
+
+  var handleSalaryMinAmountChange = useCallback(function (amount) {
+    if (!isFinite(amount) || amount <= 0) return;
+    setSalaryMinAmount(amount);
+    saveSalaryMinAmount(amount);
   }, []);
 
   var handleFile = useCallback(function (text) {
@@ -4929,11 +5201,13 @@ function App() {
     disabledCategories: disabledCategories, categoryRenames: categoryRenames,
     onDeleteCategory: handleDeleteCategory, onRenameCategory: handleRenameCategory,
     onDeleteMerchantRule: handleDeleteMerchantRule, customCategories: customCategories,
+    keywordOverrides: keywordOverrides, onAddKeyword: handleAddKeyword, onRemoveKeyword: handleRemoveKeyword,
+    salaryMinAmount: salaryMinAmount, onSalaryMinAmountChange: handleSalaryMinAmountChange,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
