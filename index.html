@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.7';
+var APP_VERSION = '1.26.8';
 
 var CHANGELOG = [
+  { version: '1.26.8', notes: [
+    'O cabeçalho da lista de transações (com Select/Cancel, Credits, Clear) fica agora fixo no topo ao fazer scroll, tanto no Resumo como em Transactions — confirmado num browser real que se mantém sempre visível e acessível',
+  ]},
   { version: '1.26.7', notes: [
     'Corrigida a causa real (confirmada por vídeo): o ecrã por trás de uma folha aberta continuava a poder fazer scroll, e o iOS podia interpretar parte do gesto de scroll dentro da folha como scroll da página de fundo, travando o scroll a meio sem aviso. O ecrã de fundo fica agora completamente bloqueado enquanto qualquer folha estiver aberta.',
   ]},
@@ -2607,6 +2610,18 @@ function OverviewScreen(props) {
 
   var swipeRef = useRef(null);
   var monthStripRef = useRef(null);
+  var monthHeaderRef = useRef(null);
+  var monthHeaderHeightState = useState(0);
+  var monthHeaderHeight = monthHeaderHeightState[0], setMonthHeaderHeight = monthHeaderHeightState[1];
+  useEffect(function () {
+    var el = monthHeaderRef.current;
+    if (!el) return;
+    function measure() { setMonthHeaderHeight(el.offsetHeight); }
+    measure();
+    var ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return function () { ro.disconnect(); };
+  }, []);
   useEffect(function () {
     var el = swipeRef.current;
     if (!el) return;
@@ -2835,6 +2850,7 @@ function OverviewScreen(props) {
 
   return h('div', { className: 'screen', ref: swipeRef },
     h('div', {
+      ref: monthHeaderRef,
       style: {
         display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20,
         position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg)', paddingTop: 4, marginTop: -4,
@@ -2989,7 +3005,13 @@ function OverviewScreen(props) {
     ) : null,
 
     h('div', null,
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 } },
+      h('div', {
+        style: {
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+          position: 'sticky', top: monthHeaderHeight, zIndex: 3, background: 'var(--bg)',
+          paddingTop: 10, paddingBottom: 10, marginTop: -10,
+        },
+      },
         h('p', { className: 'section-title', style: { margin: 0, flex: 1 } },
           'Transactions (' + visibleTx.length + ')' + (activeFilterLabel ? ' \u2014 ' + activeFilterLabel : ' \u2014 tap one to recategorize')),
         h('button', {
@@ -3294,24 +3316,24 @@ function TransactionsScreen(props) {
   }
 
   return h('div', { className: 'screen' },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
-      h('p', { className: 'section-title', style: { margin: 0 } }, filtered.length + ' transactions'),
-      h('button', {
-        className: 'btn-secondary', style: { fontSize: 11 }, onClick: toggleSelectMode,
-      }, selectMode ? 'Cancel' : 'Select')
-    ),
-
-    // The whole filter block (search, month picker, clear-all, category
-    // chips) stays pinned to the top of the screen while the transaction
-    // list below scrolls underneath it — same sticky technique used for
-    // the month-pill strip in Overview, so filters never disappear
-    // mid-scroll and there's no need to scroll back up to change one.
+    // The whole filter block (title, Select/Cancel, search, month picker,
+    // clear-all, category chips) stays pinned to the top of the screen
+    // while the transaction list below scrolls underneath it — same
+    // sticky technique used for the month-pill strip in Overview, so the
+    // title and Select/Cancel button never disappear mid-scroll.
     h('div', {
       style: {
         position: 'sticky', top: 0, zIndex: 3, background: 'var(--bg)',
         paddingTop: 4, marginTop: -4, paddingBottom: 10,
       },
     },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
+        h('p', { className: 'section-title', style: { margin: 0 } }, filtered.length + ' transactions'),
+        h('button', {
+          className: 'btn-secondary', style: { fontSize: 11 }, onClick: toggleSelectMode,
+        }, selectMode ? 'Cancel' : 'Select')
+      ),
+
       h('div', { style: { marginBottom: 10 } },
         h('input', {
           type: 'text', value: searchText, placeholder: 'Search description, category, or note\u2026',
