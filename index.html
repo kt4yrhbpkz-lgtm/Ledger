@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.6';
+var APP_VERSION = '1.26.7';
 
 var CHANGELOG = [
+  { version: '1.26.7', notes: [
+    'Corrigida a causa real (confirmada por vídeo): o ecrã por trás de uma folha aberta continuava a poder fazer scroll, e o iOS podia interpretar parte do gesto de scroll dentro da folha como scroll da página de fundo, travando o scroll a meio sem aviso. O ecrã de fundo fica agora completamente bloqueado enquanto qualquer folha estiver aberta.',
+  ]},
   { version: '1.26.6', notes: [
     'Corrigida a causa real, de forma definitiva: a folha (sheet) usada em todos os filtros e seletores de categoria passa a criar o seu próprio contexto de empilhamento isolado e fica sempre por cima de tudo, incluindo a barra de navegação inferior — independentemente de qual filtro está aberto ou de quantas categorias existem. Confirmado com teste num motor de browser real, incluindo a barra de navegação real no ecrã, simulando o cenário exato reportado.',
   ]},
@@ -4260,6 +4263,40 @@ function App() {
   var mainRef = useRef(null);
 
   useEffect(function () { applyTheme(theme); }, [theme]);
+
+  // Locks #main's own scrolling whenever ANY sheet is open, anywhere in the
+  // app. A MutationObserver is used rather than reacting to React state,
+  // since the sheets that open/close live in child screens' own local
+  // state (monthPickerOpen, categoryPickerOpen, bulkCategorizeOpen, etc.) —
+  // a child's state change doesn't re-render App, so there's no prop or
+  // dependency App could watch to know when a sheet opens or closes.
+  // Watching the DOM directly catches every case regardless of which
+  // screen or component owns the sheet's open/closed state.
+  //
+  // Why this matters: a sheet's own internal scroll area worked correctly
+  // in isolated testing, but a real-device report showed scrolling inside
+  // it could still stall partway through. The likely mechanism: #main
+  // ALSO has overflow-y:auto (it's the screen's own scroll container), and
+  // a touch-scroll gesture that starts even slightly outside the sheet's
+  // exact list bounds can have iOS Safari route part of it to #main
+  // instead of the sheet's inner list — and iOS Safari's chrome (the
+  // address bar / bottom toolbar showing or hiding) auto-resizing the
+  // viewport mid-gesture compounds this by changing the sheet's own
+  // calc(100vh - ...) height while a scroll is in progress. Setting
+  // #main to overflow:hidden while a sheet is open removes it as a
+  // possible destination for a stray touch-scroll entirely.
+  useEffect(function () {
+    var el = mainRef.current;
+    if (!el) return;
+    function syncLock() {
+      var sheetOpen = Boolean(document.querySelector('.sheet-overlay'));
+      el.style.overflow = sheetOpen ? 'hidden' : 'auto';
+    }
+    syncLock();
+    var observer = new MutationObserver(syncLock);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return function () { observer.disconnect(); };
+  }, []);
 
   // Scroll-to-top button: visible once the person has scrolled down a bit
   // on whichever screen is currently active. Resets to hidden whenever the
