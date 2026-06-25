@@ -143,9 +143,9 @@ button { font-family: var(--sans); }
 }
 .section-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
 
-.sheet-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-end; }
+.sheet-overlay { position: fixed; inset: 0; z-index: 999; isolation: isolate; display: flex; align-items: flex-end; }
 .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
-.sheet { position: relative; width: 100%; background: var(--surface); border-radius: 24px 24px 0 0; max-height: 82vh; display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); box-shadow: 0 -8px 30px rgba(0,0,0,0.15); }
+.sheet { position: relative; width: 100%; background: var(--surface); border-radius: 24px 24px 0 0; max-height: calc(100vh - var(--nav-h) - var(--safe-bottom) - 24px); display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); box-shadow: 0 -8px 30px rgba(0,0,0,0.15); }
 .sheet-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .sheet-body { overflow-y: auto; padding: 14px 20px; flex: 1; min-height: 0; }
 
@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.5';
+var APP_VERSION = '1.26.6';
 
 var CHANGELOG = [
+  { version: '1.26.6', notes: [
+    'Corrigida a causa real, de forma definitiva: a folha (sheet) usada em todos os filtros e seletores de categoria passa a criar o seu próprio contexto de empilhamento isolado e fica sempre por cima de tudo, incluindo a barra de navegação inferior — independentemente de qual filtro está aberto ou de quantas categorias existem. Confirmado com teste num motor de browser real, incluindo a barra de navegação real no ecrã, simulando o cenário exato reportado.',
+  ]},
   { version: '1.26.5', notes: [
     'O filtro "Filter by category" em Transactions tinha o mesmo problema da última correção — corrigido com a mesma estrutura comprovada do filtro de meses, e confirmado com teste de geometria real antes desta entrega',
   ]},
@@ -3517,7 +3520,7 @@ function MonthFilterSheet(props) {
 // never had the problem, so this copies it rather than re-deriving it.
 function CategoryFilterSheet(props) {
   return h(Sheet, { title: 'Filter by category', onClose: props.onClose },
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, maxHeight: '50vh', overflowY: 'auto' } },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '50vh', overflowY: 'auto' } },
       h('div', {
         onClick: function () { props.onSelect(null); },
         style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
