@@ -232,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.9';
+var APP_VERSION = '1.27.0';
 
 var CHANGELOG = [
+  { version: '1.27.0', notes: [
+    'Corrigida a deteção de regras: Salary, Rent, Credit Card Payment e Utilities não apareciam com nenhuma regra associada porque a sua lógica não vive na lista de regras de palavra-chave normal — Salary tem uma verificação especial (remetente + valor), e as outras três vêm da "Housing transfer rule". Agora aparecem corretamente.',
+    'Tocar numa categoria em "Categories" filtra a lista de "Automatic categorization rules" abaixo, mostrando as regras automáticas dessa categoria — tanto as standing rules criadas por "Apply to all" como, quando existirem, as palavras-chave reais das regras incorporadas no código (extraídas diretamente da lógica real, nunca uma descrição separada que possa ficar desatualizada). Tocar na mesma categoria outra vez limpa o filtro.',
+  ]},
   { version: '1.26.9', notes: [
     'Em Definições → "Categories", cada categoria mostra agora também quantas regras automáticas a usam: as regras criadas por "Apply to all" e, se existirem, as regras incorporadas no código da app — estas últimas destacadas a cor diferente, já que apagar essa categoria não remove a regra em si, só deixa de mostrar esse nome (a transação cai na próxima regra que corresponder, ou em Other)',
   ]},
@@ -550,7 +554,7 @@ var FAQ_ITEMS = [
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
   { q: 'Como apago ou renomeio uma categoria?',
-    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
+    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
   { q: 'Como funciona a "Housing transfer rule"?',
@@ -3872,11 +3876,28 @@ function CategoryManagementSection(props) {
   //   - merchantRules: standing rules created by a confirmed "Apply to
   //     all" bulk action — fully visible and individually deletable in
   //     the "Automatic categorization rules" section below this one.
+  // Counts EVERY mechanism that automatically assigns a category from
+  // code, not just the keyword RULES array — there are two other built-in
+  // mechanisms that don't live in RULES at all:
+  //   - Salary: a special-cased check (sender pattern + amount threshold)
+  //     that runs BEFORE RULES is even consulted, in autoCategory().
+  //   - Rent / Credit Card Payment / Utilities: produced by
+  //     applyHousingTransferRule(), a separate per-month post-processing
+  //     pass, not a per-transaction keyword match at all.
+  // Without these, those four categories looked like they had ZERO rules
+  // explaining how they get assigned, which was misleading — there IS
+  // logic deciding them, it just isn't a RULES entry.
   var hardcodedRuleCounts = useMemo(function () {
     var counts = {};
     RULES.forEach(function (r) { counts[r.category] = (counts[r.category] || 0) + 1; });
+    counts['Salary'] = (counts['Salary'] || 0) + 1;
+    if (props.housingRuleEnabled) {
+      ['Rent', 'Credit Card Payment', 'Utilities'].forEach(function (c) {
+        counts[c] = (counts[c] || 0) + 1;
+      });
+    }
     return counts;
-  }, []);
+  }, [props.housingRuleEnabled]);
   var merchantRuleCounts = useMemo(function () {
     var counts = {};
     var rules = props.merchantRules || {};
@@ -3912,15 +3933,24 @@ function CategoryManagementSection(props) {
         var isProtected = PROTECTED_CATEGORIES.indexOf(category) !== -1;
         var hardcodedCount = hardcodedRuleCounts[category] || 0;
         var merchantCount = merchantRuleCounts[category] || 0;
+        var isActiveFilter = props.filterCategory === category;
         return h('div', {
           key: category,
           style: {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
             padding: '12px 16px', borderBottom: i < sortedCategories.length - 1 ? '1px solid var(--border)' : 'none',
+            background: isActiveFilter ? 'var(--surface2)' : 'transparent',
           },
         },
-          h('div', { style: { flex: 1, overflow: 'hidden' } },
-            h('div', { style: { fontSize: 13, color: 'var(--text)' } }, category),
+          h('div', {
+            style: { flex: 1, overflow: 'hidden', cursor: 'pointer' },
+            // Tapping the name/count area filters "Automatic categorization
+            // rules" below to just this category — tapping the SAME
+            // category again clears the filter, the same toggle pattern
+            // used by the Credits/category filters elsewhere in the app.
+            onClick: function () { props.onFilterCategory(isActiveFilter ? null : category); },
+          },
+            h('div', { style: { fontSize: 13, color: 'var(--text)', fontWeight: isActiveFilter ? 600 : 400 } }, category),
             h('div', { style: { fontSize: 11, color: 'var(--muted)' } },
               count + ' transaction' + (count === 1 ? '' : 's'),
               merchantCount > 0 ? ' \u00b7 ' + merchantCount + ' rule' + (merchantCount === 1 ? '' : 's') : null,
@@ -3995,21 +4025,76 @@ function CategoryManagementSection(props) {
   );
 }
 
+// Extracts a human-readable keyword pattern from one of RULES' test
+// functions via Function.prototype.toString() — pulls out just the regex
+// source (e.g. "REST |RESTAURANTE") rather than showing the full function
+// wrapper, while staying 100% faithful to the actual matching logic since
+// it's read directly from the real function rather than a separately
+// maintained description that could drift out of sync.
+function extractRulePattern(testFn) {
+  var src = testFn.toString();
+  var match = src.match(/\/(.+)\/i/);
+  return match ? match[1] : src;
+}
+
 function MerchantRulesSection(props) {
   var rules = props.merchantRules || {};
   var fragments = useMemo(function () {
-    return Object.keys(rules).sort(function (a, b) { return a.localeCompare(b); });
-  }, [rules]);
+    var all = Object.keys(rules).sort(function (a, b) { return a.localeCompare(b); });
+    if (!props.filterCategory) return all;
+    return all.filter(function (f) { return rules[f] === props.filterCategory; });
+  }, [rules, props.filterCategory]);
+
+  // Built-in rules matching the active filter — RULES entries directly,
+  // plus the two special-cased mechanisms (Salary, the Housing transfer
+  // rule's three categories) that don't live in RULES at all and so need
+  // their own plain-language description instead of an extracted pattern.
+  var matchingBuiltInRules = useMemo(function () {
+    if (!props.filterCategory) return [];
+    var matches = RULES.filter(function (r) { return r.category === props.filterCategory; })
+      .map(function (r) { return extractRulePattern(r.test); });
+    if (props.filterCategory === 'Salary') {
+      matches.push('Sender matches "TFI JOANA FILIPA TAVA" AND amount \u2265 ' + SALARY_MIN_AMOUNT + '\u20ac');
+    }
+    if (['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1) {
+      matches.push('Decided by the Housing transfer rule\u2019s amount thresholds each month (see that section above), not a fixed keyword');
+    }
+    return matches;
+  }, [props.filterCategory]);
+
   var confirmingState = useState(null); // fragment string | null
   var confirming = confirmingState[0], setConfirming = confirmingState[1];
 
-  if (fragments.length === 0) {
-    return h('p', { style: { fontSize: 12, color: 'var(--muted)' } },
-      'No standing rules yet — these are created automatically the first time you bulk-categorize a merchant with more than one transaction.');
-  }
-
   return h('div', null,
-    h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
+    props.filterCategory ? h('div', {
+      style: {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+        marginBottom: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 10,
+      },
+    },
+      h('span', { style: { fontSize: 12, color: 'var(--text)' } }, 'Showing rules for ', h('strong', null, props.filterCategory)),
+      h('button', { onClick: props.onClearFilter, className: 'btn-secondary', style: { fontSize: 11, padding: '5px 10px' } }, 'Clear')
+    ) : null,
+
+    matchingBuiltInRules.length > 0 ? h('div', { className: 'card', style: { marginBottom: 12, padding: 0, overflow: 'hidden' } },
+      matchingBuiltInRules.map(function (pattern, i) {
+        return h('div', {
+          key: i,
+          style: {
+            padding: '12px 16px', borderBottom: i < matchingBuiltInRules.length - 1 ? '1px solid var(--border)' : 'none',
+          },
+        },
+          h('div', { style: { fontSize: 11, color: 'var(--accent2)', marginBottom: 2 } }, 'Built-in rule'),
+          h('div', { style: { fontSize: 12, color: 'var(--text)', fontFamily: 'var(--mono)' } }, pattern)
+        );
+      })
+    ) : null,
+
+    fragments.length === 0 ? h('p', { style: { fontSize: 12, color: 'var(--muted)' } },
+      props.filterCategory
+        ? 'No standing rules for this category.' + (matchingBuiltInRules.length === 0 ? ' No built-in rules either.' : '')
+        : 'No standing rules yet — these are created automatically the first time you bulk-categorize a merchant with more than one transaction.'
+    ) : h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
       fragments.map(function (fragment, i) {
         return h('div', {
           key: fragment,
@@ -4141,6 +4226,12 @@ function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
   var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames);
 
+  // Which category's rules to show in "Automatic categorization rules"
+  // below — tapping a category row in "Categories" sets this, filtering
+  // the rules list to just that category. null means show everything.
+  var ruleFilterCategoryState = useState(null);
+  var ruleFilterCategory = ruleFilterCategoryState[0], setRuleFilterCategory = ruleFilterCategoryState[1];
+
   // The most recent real transaction date across everything stored — answers
   // "up to what date do I actually have data," distinct from the upload
   // timestamp below (which answers "when did I last try to import").
@@ -4238,10 +4329,14 @@ function SettingsScreen(props) {
       categories: props.categories, counts: categoryCounts, merchantRules: props.merchantRules,
       onDelete: props.onDeleteCategory, onRename: props.onRenameCategory,
       housingRuleEnabled: Boolean(props.housingRule && props.housingRule.enabled),
+      filterCategory: ruleFilterCategory, onFilterCategory: setRuleFilterCategory,
     }),
 
     h('p', { className: 'section-title' }, 'Automatic categorization rules'),
-    h(MerchantRulesSection, { merchantRules: props.merchantRules, onDelete: props.onDeleteMerchantRule }),
+    h(MerchantRulesSection, {
+      merchantRules: props.merchantRules, onDelete: props.onDeleteMerchantRule,
+      filterCategory: ruleFilterCategory, onClearFilter: function () { setRuleFilterCategory(null); },
+    }),
 
     h(ScreenFooter)
   );
