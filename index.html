@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.1';
+var APP_VERSION = '1.27.2';
 
 var CHANGELOG = [
+  { version: '1.27.2', notes: [
+    'Rent, Credit Card Payment e Utilities passam a estar permanentemente protegidas contra apagar (tal como Other, Salary e Investments), mesmo com a Housing transfer rule desativada — a lógica que as produz existe sempre no código, por isso apagá-las nunca seria uma remoção real. Continuam a poder ser renomeadas.',
+  ]},
   { version: '1.27.1', notes: [
     'As palavras-chave das regras incorporadas (ex: Restaurants, Fuel, Groceries) tornam-se editáveis: toca numa categoria em "Categories" e, em "Automatic categorization rules", podes adicionar novas palavras-chave ou remover qualquer uma das existentes, incluindo as originais',
     '4 regras com padrões mais complexos do que uma lista de palavras simples (Income / Transfers In, a regra específica de Mbway da Housing, Card Purchase (uncategorized), Transfer Out) continuam só visíveis, não editáveis por esta interface',
@@ -559,7 +562,7 @@ var FAQ_ITEMS = [
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
   { q: 'Como apago ou renomeio uma categoria?',
-    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
+    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary, Investments, Rent, Credit Card Payment e Utilities não podem ser apagadas, porque têm lógica própria noutras partes da app que continua a existir mesmo que a categoria "desaparecesse" — mas podem ser renomeadas livremente.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
   { q: 'Como edito as palavras-chave de uma categoria incorporada (ex: Restaurants, Fuel)?',
@@ -3955,14 +3958,18 @@ function ReviewUncategorized(props) {
 // 'Salary' and 'Investments' drive dedicated detection/splitting logic
 // elsewhere (salary recognition, invested vs. withdrawn), and 'Other' is
 // the universal fallback every deleted category's transactions land in —
-// deleting it would have nowhere left to fall back to. They can still be
-// renamed, just not removed.
-var PROTECTED_CATEGORIES = ['Other', 'Salary', 'Investments'];
-var HOUSING_RULE_CATEGORIES = ['Rent', 'Credit Card Payment', 'Utilities'];
+// deleting it would have nowhere left to fall back to. Rent / Credit Card
+// Payment / Utilities are ALSO permanently protected, even when the
+// Housing transfer rule is currently turned off — the rule's matching
+// logic still exists in the app's code either way, so deleting these
+// categories could never be a real, lasting deletion the way it is for an
+// ordinary category; it would just look deleted until the rule (if ever
+// re-enabled) recreated them again. All of these can still be renamed,
+// just not removed.
+var PROTECTED_CATEGORIES = ['Other', 'Salary', 'Investments', 'Rent', 'Credit Card Payment', 'Utilities'];
 
 // Categories + per-category transaction counts, with delete (after
-// confirmation, with a guard against deleting a category the active
-// Housing transfer rule would just recreate next month) and rename.
+// confirmation) and rename.
 function CategoryManagementSection(props) {
   var sortedCategories = useMemo(function () {
     return props.categories.slice().sort(function (a, b) { return a.localeCompare(b); });
@@ -3973,8 +3980,6 @@ function CategoryManagementSection(props) {
   var renaming = renamingState[0], setRenaming = renamingState[1];
   var renameDraftState = useState('');
   var renameDraft = renameDraftState[0], setRenameDraft = renameDraftState[1];
-  var housingBlockedState = useState(null); // category name | null — shown instead of the confirm sheet
-  var housingBlocked = housingBlockedState[0], setHousingBlocked = housingBlockedState[1];
 
   // Two separate counts per category, since they carry very different
   // implications for what deleting/renaming the category actually means:
@@ -4022,10 +4027,6 @@ function CategoryManagementSection(props) {
   }, [props.merchantRules]);
 
   function startDelete(category) {
-    if (props.housingRuleEnabled && HOUSING_RULE_CATEGORIES.indexOf(category) !== -1) {
-      setHousingBlocked(category);
-      return;
-    }
     setDeleting(category);
   }
 
@@ -4086,17 +4087,6 @@ function CategoryManagementSection(props) {
       })
     ),
 
-    // Blocked-by-housing-rule explanation — shown INSTEAD of the normal
-    // confirm sheet, since deleting now would just have the rule recreate
-    // the category again next month, which would be confusing rather than
-    // a real deletion.
-    housingBlocked ? h(Sheet, { title: 'Can\u2019t delete ' + housingBlocked, onClose: function () { setHousingBlocked(null); } },
-      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.5 } },
-        h('strong', null, housingBlocked), ' is produced automatically by the Housing transfer rule, which is currently on. Deleting it now would just have the rule recreate it again next month.'),
-      h('p', { style: { fontSize: 13, color: 'var(--text)', marginBottom: 16, lineHeight: 1.5 } },
-        'Turn the Housing transfer rule off first (further down this screen), then come back here to delete ', housingBlocked, '.'),
-      h('button', { className: 'btn-secondary', style: { width: '100%' }, onClick: function () { setHousingBlocked(null); } }, 'Got it')
-    ) : null,
 
     // Delete confirmation — states the irreversible part plainly (every
     // transaction under this category becomes Other) before committing.
