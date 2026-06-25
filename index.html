@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.8';
+var APP_VERSION = '1.26.9';
 
 var CHANGELOG = [
+  { version: '1.26.9', notes: [
+    'Em Definições → "Categories", cada categoria mostra agora também quantas regras automáticas a usam: as regras criadas por "Apply to all" e, se existirem, as regras incorporadas no código da app — estas últimas destacadas a cor diferente, já que apagar essa categoria não remove a regra em si, só deixa de mostrar esse nome (a transação cai na próxima regra que corresponder, ou em Other)',
+  ]},
   { version: '1.26.8', notes: [
     'O cabeçalho da lista de transações (com Select/Cancel, Credits, Clear) fica agora fixo no topo ao fazer scroll, tanto no Resumo como em Transactions — confirmado num browser real que se mantém sempre visível e acessível',
   ]},
@@ -547,7 +550,7 @@ var FAQ_ITEMS = [
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
   { q: 'Como apago ou renomeio uma categoria?',
-    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
+    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary e Investments não podem ser apagadas, porque têm lógica própria noutras partes da app, mas podem ser renomeadas. Se a categoria for Rent, Credit Card Payment ou Utilities e a "Housing transfer rule" estiver ativa, é preciso desativar essa regra primeiro, senão a categoria seria recriada automaticamente no mês seguinte.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
   { q: 'Como funciona a "Housing transfer rule"?',
@@ -3856,6 +3859,34 @@ function CategoryManagementSection(props) {
   var housingBlockedState = useState(null); // category name | null — shown instead of the confirm sheet
   var housingBlocked = housingBlockedState[0], setHousingBlocked = housingBlockedState[1];
 
+  // Two separate counts per category, since they carry very different
+  // implications for what deleting/renaming the category actually means:
+  //   - hardcoded: keyword RULES baked into the app's code (e.g. the
+  //     Restaurants keyword list). Deleting a category with hardcoded
+  //     rules doesn't remove the rule itself — it just suppresses that
+  //     ONE category name from autoCategory()'s output, falling through to
+  //     the next matching rule (or Other). Flagged with a warning color
+  //     since this is the riskier case: the underlying matching logic is
+  //     still there and not something the person can edit from this
+  //     screen, only disable as a whole.
+  //   - merchantRules: standing rules created by a confirmed "Apply to
+  //     all" bulk action — fully visible and individually deletable in
+  //     the "Automatic categorization rules" section below this one.
+  var hardcodedRuleCounts = useMemo(function () {
+    var counts = {};
+    RULES.forEach(function (r) { counts[r.category] = (counts[r.category] || 0) + 1; });
+    return counts;
+  }, []);
+  var merchantRuleCounts = useMemo(function () {
+    var counts = {};
+    var rules = props.merchantRules || {};
+    Object.keys(rules).forEach(function (fragment) {
+      var cat = rules[fragment];
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [props.merchantRules]);
+
   function startDelete(category) {
     if (props.housingRuleEnabled && HOUSING_RULE_CATEGORIES.indexOf(category) !== -1) {
       setHousingBlocked(category);
@@ -3879,6 +3910,8 @@ function CategoryManagementSection(props) {
       sortedCategories.map(function (category, i) {
         var count = props.counts[category] || 0;
         var isProtected = PROTECTED_CATEGORIES.indexOf(category) !== -1;
+        var hardcodedCount = hardcodedRuleCounts[category] || 0;
+        var merchantCount = merchantRuleCounts[category] || 0;
         return h('div', {
           key: category,
           style: {
@@ -3888,7 +3921,15 @@ function CategoryManagementSection(props) {
         },
           h('div', { style: { flex: 1, overflow: 'hidden' } },
             h('div', { style: { fontSize: 13, color: 'var(--text)' } }, category),
-            h('div', { style: { fontSize: 11, color: 'var(--muted)' } }, count + ' transaction' + (count === 1 ? '' : 's'))
+            h('div', { style: { fontSize: 11, color: 'var(--muted)' } },
+              count + ' transaction' + (count === 1 ? '' : 's'),
+              merchantCount > 0 ? ' \u00b7 ' + merchantCount + ' rule' + (merchantCount === 1 ? '' : 's') : null,
+              // Hardcoded rules get the warning color specifically — this
+              // is the case where deleting the category doesn't remove
+              // any rule, it just suppresses this one name from a piece
+              // of matching logic that stays in the app either way.
+              hardcodedCount > 0 ? h('span', { style: { color: 'var(--accent2)' } }, ' \u00b7 ' + hardcodedCount + ' built-in rule' + (hardcodedCount === 1 ? '' : 's')) : null
+            )
           ),
           h('button', {
             onClick: function () { startRename(category); },
@@ -4194,7 +4235,7 @@ function SettingsScreen(props) {
 
     h('p', { className: 'section-title' }, 'Categories'),
     h(CategoryManagementSection, {
-      categories: props.categories, counts: categoryCounts,
+      categories: props.categories, counts: categoryCounts, merchantRules: props.merchantRules,
       onDelete: props.onDeleteCategory, onRename: props.onRenameCategory,
       housingRuleEnabled: Boolean(props.housingRule && props.housingRule.enabled),
     }),
