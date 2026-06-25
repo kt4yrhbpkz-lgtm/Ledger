@@ -149,6 +149,19 @@ button { font-family: var(--sans); }
 .sheet-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .sheet-body { overflow-y: auto; padding: 14px 20px; flex: 1; min-height: 0; }
 
+/* Full-screen variant for bulk-categorize: covers the ENTIRE viewport
+   (no max-height, no align-items: flex-end, nothing computed relative to
+   the bottom nav) — deliberately avoids the whole class of "does this
+   floating element's z-index actually win against that OTHER floating
+   element" problem by not sharing screen space with anything else at all. */
+.fullscreen-overlay { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; flex-direction: column; }
+.fullscreen-header {
+  padding: 16px 20px; padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0; background: var(--bg);
+}
+.fullscreen-body { flex: 1; overflow-y: auto; padding: 14px 20px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+
 .faq-q { width: 100%; text-align: left; background: none; border: none; padding: 14px 2px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; font-family: var(--sans); border-bottom: 1px solid var(--border); }
 .faq-a { padding: 0 2px 14px; font-size: 13px; color: var(--muted); line-height: 1.5; border-bottom: 1px solid var(--border); }
 
@@ -232,9 +245,16 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.0';
+var APP_VERSION = '1.26.2';
 
 var CHANGELOG = [
+  { version: '1.26.2', notes: [
+    'FAQ atualizada com entradas que faltavam: bot\u00e3o "\u21bb" para voltar ao m\u00eas atual, ordem alfab\u00e9tica das categorias, "Other income" oculto quando 0\u20ac, e a nova categoriza\u00e7\u00e3o em massa em tela inteira',
+  ]},
+  { version: '1.26.1', notes: [
+    'Redesenhada a categorização em massa (Resumo e Transactions): abre agora em tela inteira, em vez de uma folha que sobe do fundo. Resolve de forma definitiva o problema de a última categoria poder ficar tapada pela barra de navegação — confirmado com testes diretos num motor de browser real.',
+    '"Categorize merchants" continua a usar a folha habitual, já que esse fluxo nunca teve este problema',
+  ]},
   { version: '1.26.0', notes: [
     'Novas secções em Definições: "Categories" e "Automatic categorization rules"',
     '"Categories" mostra todas as categorias (incluindo as incorporadas) com o número de transações em cada uma — podes apagar (com confirmação; as transações dessa categoria passam para Other) ou renomear qualquer uma, exceto Other, Salary e Investments, que ficam protegidas por dependerem de lógica própria',
@@ -531,14 +551,20 @@ var FAQ_ITEMS = [
     a: 'Mostra todas as transações positivas (créditos) do mês selecionado, de qualquer categoria — salário, outros rendimentos, reembolsos, levantamentos de investimento, tudo junto, sem distinção. Toca novamente para limpar o filtro.' },
   { q: 'O que significa a mensagem depois de importar um ficheiro?',
     a: '"Added X new transactions (Y already saved)" — X são as transações realmente novas, Y é o total que já tinhas guardado (inclui tanto as que coincidem exatamente como as que foram reconhecidas pela data, valor e descrição). Se aparecer "Of those, Z foram guardadas com um formato de identificador mais antigo", Z é um SUBCONJUNTO de Y, não um número adicional — explica apenas quantas dessas Y duplicadas foram detetadas dessa forma alternativa.' },
+  { q: 'Porque \u00e9 que \"Other income\" por vezes n\u00e3o aparece no Resumo?',
+    a: '"Other income" fica oculto sempre que for 0\u20ac nesse m\u00eas, para n\u00e3o ocupar espa\u00e7o sem necessidade. Tamb\u00e9m n\u00e3o mostra a compara\u00e7\u00e3o com o m\u00eas anterior, ano anterior, ou m\u00e9dia de 12 meses, ao contr\u00e1rio de Sal\u00e1rio, Spent e Invested.' },
   { q: 'Como funciono os reembolsos de despesas partilhadas?',
     a: 'Se pagaste algo (ex: uma viagem, categorizada como Trips & Holidays) e depois alguém te devolveu parte do dinheiro, categoriza essa transação de devolução com a MESMA categoria da despesa original (em vez de a deixar como rendimento genérico). A categoria passa a mostrar o valor líquido — o que a viagem realmente te custou, já descontado o que recebeste de volta — e esse valor deixa de contar também como "Other income", para nunca seres contabilizado duas vezes. Isto aplica-se a qualquer categoria de despesa, não só viagens. Se o reembolso cobrir o gasto todo, a categoria desaparece do gráfico circular nesse mês, já que não sobra nada para mostrar.' },
   { q: 'Como funciona o modo privado?',
     a: 'Toca no \ud83d\udc41\ufe0f no topo de qualquer ecr\u00e3 para desfocar todos os valores monet\u00e1rios da app \u2014 totais, transa\u00e7\u00f5es, gr\u00e1ficos \u2014 mantendo a forma vis\u00edvel para a app continuar a parecer normal, mas sem ningu\u00e9m conseguir ler os n\u00fameros reais por cima do teu ombro. Toca de novo para mostrar os valores. A prefer\u00eancia fica guardada neste dispositivo, mas n\u00e3o viaja com backups \u2014 ao restaurar um backup noutro telemóvel, o modo privado mant\u00e9m-se como estava nesse aparelho.' },
   { q: 'Como categorizo v\u00e1rias transa\u00e7\u00f5es de uma vez?',
-    a: 'Em Transactions ou no Resumo, toca em "Select", depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" para escolher a categoria a aplicar a todas de uma vez.' },
+    a: 'Em Transactions ou no Resumo, toca em "Select", depois toca nas transa\u00e7\u00f5es que queres marcar (podem ser de comerciantes diferentes). Quando tiveres pelo menos uma selecionada, aparece um bot\u00e3o "Categorize" que abre a lista de categorias em tela inteira, para escolheres a que se aplica a todas de uma vez.' },
   { q: 'Como pesquiso ou filtro transa\u00e7\u00f5es por m\u00eas?',
-    a: 'Em Transactions, usa a caixa de pesquisa para procurar por descri\u00e7\u00e3o, categoria ou nota. Usa o filtro "\ud83d\udcc5" para escolher um ou v\u00e1rios meses \u2014 podes combinar com a pesquisa e com o filtro de categoria. O bot\u00e3o "Clear all filters" limpa tudo de uma vez. Estes filtros ficam guardados mesmo que mudes de separador e voltes. No Resumo, h\u00e1 tamb\u00e9m uma caixa de pesquisa para procurar dentro do m\u00eas que est\u00e1s a ver.' },
+    a: 'Em Transactions, usa a caixa de pesquisa para procurar por descri\u00e7\u00e3o, categoria ou nota. Usa o filtro "\ud83d\udcc5" para escolher um ou v\u00e1rios meses \u2014 podes combinar com a pesquisa e com o filtro de categoria. O bot\u00e3o "Clear all filters" limpa tudo de uma vez. Estes filtros ficam guardados mesmo que mudes de separador e voltes. No Resumo, h\u00e1 tamb\u00e9m uma caixa de pesquisa para procurar dentro do m\u00eas que est\u00e1s a ver, e um bot\u00e3o "Credits" para ver s\u00f3 as transa\u00e7\u00f5es positivas desse m\u00eas.' },
+  { q: 'Como volto rapidamente ao m\u00eas atual no Resumo?',
+    a: 'Depois de navegares para um m\u00eas antigo (tocando na faixa de meses ou deslizando), aparece um bot\u00e3o "\u21bb" junto \u00e0 faixa de meses \u2014 toca nele para voltar de imediato ao m\u00eas mais recente. O m\u00eas que escolheres fica guardado mesmo que mudes de separador e voltes.' },
+  { q: 'Porque \u00e9 que as categorias aparecem sempre na mesma ordem?',
+    a: 'As categorias aparecem sempre por ordem alfab\u00e9tica em qualquer lista de categoriza\u00e7\u00e3o da app \u2014 ajuda a encontrares a que precisas mais rapidamente, especialmente com muitas categorias personalizadas.' },
   { q: 'Que ficheiro devo importar?',
     a: 'O export "Consulta de movimentos" da Caixadirecta (CGD), em formato CSV. Está disponível na versão web do Caixadirecta, na área de consulta de movimentos da conta.' },
 ];
@@ -3037,7 +3063,7 @@ function OverviewScreen(props) {
       h('button', { className: 'btn-primary', style: { fontSize: 12, padding: '8px 16px' }, onClick: function () { setBulkCategorizeOpen(true); } }, 'Categorize')
     ) : null,
 
-    bulkCategorizeOpen ? h(CategoryPickerSheet, {
+    bulkCategorizeOpen ? h(FullScreenCategoryPicker, {
       title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
       categories: props.categories || ALL_CATEGORIES,
       onCreateCategory: props.onCreateCategory,
@@ -3367,7 +3393,7 @@ function TransactionsScreen(props) {
       onClose: function () { setCategoryPickerOpen(false); },
     }) : null,
 
-    bulkCategorizeOpen ? h(CategoryPickerSheet, {
+    bulkCategorizeOpen ? h(FullScreenCategoryPicker, {
       title: 'Categorize ' + selectedCount + ' transaction' + (selectedCount === 1 ? '' : 's'),
       categories: props.categories || ALL_CATEGORIES,
       onCreateCategory: props.onCreateCategory,
@@ -3390,6 +3416,67 @@ function TransactionsScreen(props) {
 // overflowY on the list itself (the same belt-and-suspenders approach
 // MonthFilterSheet/CategoryFilterSheet already use) rather than depending
 // only on the Sheet's own flex-based sizing.
+// Full-screen variant of CategoryPickerSheet, used specifically for bulk-
+// categorize (multi-select in Overview/Transactions). Renders as its own
+// top-level overlay covering the entire viewport — including the area the
+// bottom nav normally occupies — rather than a sheet that rises partway
+// from the bottom and shares space with whatever else is on screen. This
+// sidesteps an entire class of "is this floating element's z-index
+// actually being respected against that OTHER floating element" bugs by
+// design: there is nothing else sharing the screen for it to lose a
+// stacking fight against.
+function FullScreenCategoryPicker(props) {
+  var creatingState = useState(false);
+  var creating = creatingState[0], setCreating = creatingState[1];
+  var newNameState = useState('');
+  var newName = newNameState[0], setNewName = newNameState[1];
+
+  function handleCreateAndSelect() {
+    if (!props.onCreateCategory) return;
+    var created = props.onCreateCategory(newName);
+    if (created) props.onSelect(created);
+  }
+
+  return h('div', { className: 'fullscreen-overlay' },
+    h('div', { className: 'fullscreen-header' },
+      h('span', { style: { fontSize: 15, fontWeight: 700, color: 'var(--text)' } }, props.title),
+      h('button', { className: 'icon-btn', onClick: props.onClose }, '\u2715')
+    ),
+    h('div', { className: 'fullscreen-body' },
+      creating ? h('div', { style: { display: 'flex', gap: 6, marginBottom: 14 } },
+        h('input', {
+          type: 'text', value: newName, autoFocus: true, placeholder: 'Category name',
+          onChange: function (e) { setNewName(e.target.value); },
+          onKeyDown: function (e) { if (e.key === 'Enter') handleCreateAndSelect(); },
+          style: {
+            flex: 1, fontSize: 13, padding: '9px 12px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', outline: 'none',
+          },
+        }),
+        h('button', { onClick: handleCreateAndSelect, className: 'btn-secondary', style: { fontSize: 12, padding: '8px 14px' } }, 'Add')
+      ) : (props.onCreateCategory ? h('button', {
+        onClick: function () { setCreating(true); },
+        style: {
+          width: '100%', textAlign: 'left', fontSize: 13, padding: '10px 4px', marginBottom: 6,
+          border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer',
+        },
+      }, '+ New category') : null),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+        props.categories.map(function (c) {
+          return h('button', {
+            key: c, onClick: function () { props.onSelect(c); },
+            style: {
+              width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              fontSize: 14, padding: '13px 4px', border: 'none', borderBottom: '1px solid var(--border)',
+              background: 'transparent', color: 'var(--text)', cursor: 'pointer',
+            },
+          }, c, h('span', { style: { color: 'var(--muted)', fontSize: 13 } }, '\u203a'));
+        })
+      )
+    )
+  );
+}
+
 function CategoryPickerSheet(props) {
   var creatingState = useState(false);
   var creating = creatingState[0], setCreating = creatingState[1];
