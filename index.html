@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.4';
+var APP_VERSION = '1.26.5';
 
 var CHANGELOG = [
+  { version: '1.26.5', notes: [
+    'O filtro "Filter by category" em Transactions tinha o mesmo problema da última correção — corrigido com a mesma estrutura comprovada do filtro de meses, e confirmado com teste de geometria real antes desta entrega',
+  ]},
   { version: '1.26.4', notes: [
     'Reconstruída a categorização em massa (Resumo, Transactions, e Categorize merchants) para usar exatamente a mesma estrutura comprovada do filtro de meses — a mesma folha, a mesma lista com scroll, sem o ecrã de tela inteira introduzido na versão anterior, que continuava a ter o mesmo problema. Confirmado com um teste de geometria real (não apenas leitura de código) antes desta entrega.',
   ]},
@@ -3502,14 +3505,19 @@ function MonthFilterSheet(props) {
 // selects (this filter is single-choice, unlike the month filter above
 // which supports several at once), and there's no need to keep the picker
 // open afterward to pick a second one.
+// Mirrors MonthFilterSheet's structure exactly — same maxHeight:50vh +
+// overflowY:auto on the list itself, same <div onClick> rows. An earlier
+// version of this component deliberately omitted the list's own
+// maxHeight/overflowY, on the theory that a SECOND nested scroll container
+// (on top of .sheet-body's own) was what made the last item unreachable on
+// a real device. That theory was disproven: CategoryPickerSheet had the
+// exact same fix applied and STILL failed, and the real cause turned out
+// to be unrelated touch-gesture handlers elsewhere intercepting the scroll.
+// MonthFilterSheet has always had this exact maxHeight/overflowY shape and
+// never had the problem, so this copies it rather than re-deriving it.
 function CategoryFilterSheet(props) {
   return h(Sheet, { title: 'Filter by category', onClose: props.onClose },
-    // No trailing buttons below this list (unlike MonthFilterSheet's
-    // Clear/Done), so — same reasoning as CategoryPickerSheet above —
-    // there's no need for a separate nested scroll container with its own
-    // maxHeight. Letting .sheet-body be the only scroll area avoids the
-    // nested-scroll conflict that could trap the last item off-screen.
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, maxHeight: '50vh', overflowY: 'auto' } },
       h('div', {
         onClick: function () { props.onSelect(null); },
         style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
