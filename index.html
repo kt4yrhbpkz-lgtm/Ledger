@@ -245,9 +245,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.26.2';
+var APP_VERSION = '1.26.3';
 
 var CHANGELOG = [
+  { version: '1.26.3', notes: [
+    'Corrigida a causa real do scroll bloqueado na categorização em massa em tela inteira: os gestos de "puxar para atualizar" e "deslizar entre meses" continuavam ativos por baixo do novo ecrã de categorização (só reconheciam o formato antigo de folha), podendo bloquear o teu scroll dentro da lista de categorias mesmo com tudo o resto correto. Confirmado com testes de geometria reais antes e depois da correção.',
+  ]},
   { version: '1.26.2', notes: [
     'FAQ atualizada com entradas que faltavam: bot\u00e3o "\u21bb" para voltar ao m\u00eas atual, ordem alfab\u00e9tica das categorias, "Other income" oculto quando 0\u20ac, e a nova categoriza\u00e7\u00e3o em massa em tela inteira',
   ]},
@@ -2631,7 +2634,7 @@ function OverviewScreen(props) {
       // was actually an attempt to scroll the sheet's own content. Bailing
       // out here whenever a sheet is open removes this entirely as a
       // possible cause.
-      if (document.querySelector('.sheet-overlay')) {
+      if (document.querySelector('.sheet-overlay') || document.querySelector('.fullscreen-overlay')) {
         startX = null;
         return;
       }
@@ -4352,7 +4355,7 @@ function App() {
       // up and reach these listeners. Bailing out here means a touch
       // intended for scrolling inside an open sheet is never also
       // interpreted as a pull-to-refresh gesture on the page underneath.
-      if (document.querySelector('.sheet-overlay')) {
+      if (document.querySelector('.sheet-overlay') || document.querySelector('.fullscreen-overlay')) {
         startX = null;
         startY = null;
         return;
