@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.6';
+var APP_VERSION = '1.27.7';
 
 var CHANGELOG = [
+  { version: '1.27.7', notes: [
+    'Corrigido o detalhe da pontuação: "Spending vs." mostrava um rácio confuso (ex: "+150%" quando na verdade significava "1.5x a média", ou seja, só 50% a mais) — agora mostra a verdadeira variação percentual, consistente com os outros dois fatores, com cor vermelha quando gastaste mais que o habitual',
+  ]},
   { version: '1.27.6', notes: [
     'Nova pontuação de 1 a 10 no Resumo, junto a "Net this month" — toca para abrir o detalhe. Combina (em peso igual): líquido positivo, crescimento do saldo real da conta em relação ao rendimento (não é o mesmo que líquido positivo, já que dinheiro investido sai da conta mesmo sendo uma escolha tua), e gastos comparados com a média dos últimos 12 meses. Se faltar histórico para algum destes fatores, calcula só com os disponíveis.',
   ]},
@@ -566,7 +569,7 @@ var FAQ_ITEMS = [
   { q: 'O que significam os n\u00fameros pequenos abaixo de Net this month, Salary, etc.?',
     a: 'Mostram a varia\u00e7\u00e3o desse valor face a tr\u00eas pontos de compara\u00e7\u00e3o: o m\u00eas anterior ("vs last month"), o mesmo m\u00eas do ano passado ("vs last year"), e a m\u00e9dia dos 12 meses anteriores ao m\u00eas atual ("vs 12mo avg"). Usa o interruptor "%" / "\u20ac" no topo do cart\u00e3o para alternar entre ver essas varia\u00e7\u00f5es em percentagem ou em valor absoluto em euros. Em "Spent", vermelho significa que gastaste mais do que no ponto de compara\u00e7\u00e3o, e verde significa que gastaste menos \u2014 o inverso das outras m\u00e9tricas, onde verde \u00e9 sempre "mais".' },
   { q: 'O que \u00e9 a pontua\u00e7\u00e3o (1 a 10) junto a "Net this month"?',
-    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina, em peso igual, tr\u00eas fatores: líquido positivo (quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (deliberadamente diferente do l\u00edquido positivo \u2014 dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, por isso podes ter um l\u00edquido excelente mas o saldo da conta crescer pouco); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses. Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator (por exemplo, ainda n\u00e3o tens m\u00eas anterior para comparar o saldo, ou ainda n\u00e3o tens m\u00e9dia de 12 meses), a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
+    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina, em peso igual, tr\u00eas fatores: líquido positivo (quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (deliberadamente diferente do l\u00edquido positivo \u2014 dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, por isso podes ter um l\u00edquido excelente mas o saldo da conta crescer pouco); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator (por exemplo, ainda n\u00e3o tens m\u00eas anterior para comparar o saldo, ou ainda n\u00e3o tens m\u00e9dia de 12 meses), a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
   { q: 'Como \u00e9 calculada a m\u00e9dia dos 12 meses?',
     a: 'A m\u00e9dia inclui os 12 meses civis imediatamente antes do m\u00eas que est\u00e1s a ver \u2014 nunca o pr\u00f3prio m\u00eas atual. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico (por exemplo, s\u00f3 tens dados de 4 meses), a app usa a m\u00e9dia desses meses que existirem, em vez de esperar por um ano completo.' },
   { q: 'Porque \u00e9 que algumas compara\u00e7\u00f5es mostram "New" ou n\u00e3o aparecem nada?',
@@ -2644,7 +2647,15 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
   // scores full — scoreFactorFromPercent's "higher is better" shape is
   // applied to (200 - pct) to flip it without writing a second function.
   var spendingScore = spendingVsAvgPct !== null ? scoreFactorFromPercent(200 - spendingVsAvgPct, 100, 150) : null;
-  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: spendingVsAvgPct });
+  // The displayed value is the variance from average (0% = spent exactly
+  // the average, -50% = spent half, +50% = spent 1.5x) — NOT the raw ratio
+  // used for scoring above. Showing the raw ratio with a "+" sign in front
+  // would misleadingly read as "150% above average" when it actually means
+  // "1.5x average" (i.e. 50% above) — this keeps the displayed number
+  // consistent with how the other two factors are shown (a true
+  // percentage change), even though the underlying ratio is used for the
+  // actual 0-1 scoring math just above.
+  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: spendingVsAvgPct - 100 });
 
   if (factors.length === 0) return null;
 
@@ -3245,13 +3256,25 @@ function OverviewScreen(props) {
         monthlyScore.factors.map(function (f) {
           var label = f.key === 'netPositive' ? 'Net positive (left of income)'
             : f.key === 'balanceGrowth' ? 'Balance growth (vs. income)'
-            : 'Spending vs. 12-month average';
+            : 'Spending vs. usual (12-month avg)';
+          // For netPositive/balanceGrowth, a higher number is better (more
+          // left over, more saved) — shown in the gain color. For
+          // spendingVsAverage the sense flips: a higher number means MORE
+          // spent than usual, which is worse, so it's shown in the loss
+          // color instead — same red/green logic the rest of the app uses
+          // for "Spent" comparisons elsewhere (see ComparisonRow's
+          // invertColor).
+          var isInverted = f.key === 'spendingVsAverage';
+          var isGood = isInverted ? f.value <= 0 : f.value >= 0;
           return h('div', { key: f.key, style: { display: 'flex', justifyContent: 'space-between', color: 'var(--text)' } },
             h('span', null, label),
-            h('span', { style: { fontFamily: 'var(--mono)' } }, (f.value >= 0 ? '+' : '') + f.value.toFixed(0) + '%')
+            h('span', { style: { fontFamily: 'var(--mono)', color: isGood ? 'var(--gain)' : 'var(--loss)' } },
+              (f.value >= 0 ? '+' : '') + f.value.toFixed(0) + '%')
           );
         }),
-        monthlyScore.factors.length < 3 ? h('div', { style: { color: 'var(--muted)', fontSize: 11, marginTop: 2 } },
+        h('div', { style: { color: 'var(--muted)', fontSize: 11, marginTop: 2, lineHeight: 1.4 } },
+          'Spending vs. usual: 0% means you spent exactly your typical amount; negative means you spent less than usual (good), positive means more (worse).'),
+        monthlyScore.factors.length < 3 ? h('div', { style: { color: 'var(--muted)', fontSize: 11 } },
           'Calculated from ' + monthlyScore.factors.length + ' of 3 factors \u2014 the rest need more history to compare against.') : null
       ) : null,
       h('div', { style: { height: 1, background: 'var(--border)' } }),
