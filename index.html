@@ -232,9 +232,18 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.8';
+var APP_VERSION = '1.27.11';
 
 var CHANGELOG = [
+  { version: '1.27.11', notes: [
+    'Simplificação interna do código, sem alterar nenhum comportamento visível: as funções de guardar/carregar dados repetitivas foram unificadas numa só base comum, vários handlers de "atualizar e guardar" passaram a partilhar a mesma lógica, e os dois filtros (por mês e por categoria) passaram a partilhar o mesmo componente visual de seleção. Confirmado com a suite de testes completa e novos testes de geometria sem qualquer regressão.',
+  ]},
+  { version: '1.27.10', notes: [
+    'Corrigido o gráfico de tendência por categoria em Trends: Income / Transfers In, Transfers (P2P) e Transfer Out mostravam sempre 0, mesmo com transações reais — estas categorias nunca passavam pela lógica de soma porque são tipicamente créditos, e estavam ao mesmo tempo excluídas do cálculo de reembolsos. Agora somam corretamente pelo valor de cada transação, tal como Salary e Investments já faziam.',
+  ]},
+  { version: '1.27.9', notes: [
+    'As datas nas listas de transações (Resumo e Transactions, incluindo o modo de seleção múltipla) mostram agora o ano também — ex: "25 Jun 2026" em vez de "25 Jun"',
+  ]},
   { version: '1.27.8', notes: [
     'A pontuação mensal deixa de dividir os 3 fatores em peso igual: "Balance growth" passa a pesar só 15%, e "Net positive" e "Spending vs. usual" dividem os restantes 85% (42.5% cada). Se faltar "Balance growth", os outros dois ficam a 50%/50%.',
   ]},
@@ -1026,61 +1035,51 @@ var KEYWORD_OVERRIDES_KEY = 'ledger:keyword-overrides';
 var SALARY_MIN_AMOUNT_KEY = 'ledger:salary-min-amount';
 var SALARY_THRESHOLD_SNAPSHOTS_KEY = 'ledger:salary-threshold-snapshots';
 
-function loadStoredTransactions() {
-  try {
-    var raw = localStorage.getItem(TX_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
+// Most of this app's localStorage values are "just JSON, with a default if
+// missing or corrupt" — this factory captures that exact shape once
+// instead of repeating the same try/catch/JSON.parse/JSON.stringify in
+// every load/save pair. `defaultValue` is called fresh each time (so an
+// object/array default is never accidentally shared/mutated across
+// calls). Deliberately NOT used for keys with extra logic beyond plain
+// JSON (loadPrivacyMode and loadLastUploadAt store raw strings, not JSON;
+// loadSalaryMinAmount validates and clamps a number; loadHousingRule
+// merges saved data over DEFAULT_HOUSING_RULE) — those keep their own
+// hand-written functions below.
+function makeJSONStorage(key, defaultValue) {
+  return {
+    load: function () {
+      try {
+        var raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : defaultValue();
+      } catch (e) {
+        return defaultValue();
+      }
+    },
+    save: function (value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    },
+  };
 }
 
-function saveStoredTransactions(txMap) {
-  localStorage.setItem(TX_KEY, JSON.stringify(txMap));
-}
+var transactionsStorage = makeJSONStorage(TX_KEY, function () { return {}; });
+function loadStoredTransactions() { return transactionsStorage.load(); }
+function saveStoredTransactions(txMap) { transactionsStorage.save(txMap); }
 
-function loadOverrides() {
-  try {
-    var raw = localStorage.getItem(OVERRIDES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveOverrides(overrides) {
-  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
-}
+var overridesStorage = makeJSONStorage(OVERRIDES_KEY, function () { return {}; });
+function loadOverrides() { return overridesStorage.load(); }
+function saveOverrides(overrides) { overridesStorage.save(overrides); }
 
 // User-created categories, kept separate from the built-in RULES-derived
 // list so a custom name survives even if the built-in list ever changes.
-function loadCustomCategories() {
-  try {
-    var raw = localStorage.getItem(CUSTOM_CATEGORIES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveCustomCategories(list) {
-  localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(list));
-}
+var customCategoriesStorage = makeJSONStorage(CUSTOM_CATEGORIES_KEY, function () { return []; });
+function loadCustomCategories() { return customCategoriesStorage.load(); }
+function saveCustomCategories(list) { customCategoriesStorage.save(list); }
 
 // Free-text notes per transaction, for anything more specific than a
 // category — keyed by transaction id, same pattern as category overrides.
-function loadNotes() {
-  try {
-    var raw = localStorage.getItem(NOTES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveNotes(notes) {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-}
+var notesStorage = makeJSONStorage(NOTES_KEY, function () { return {}; });
+function loadNotes() { return notesStorage.load(); }
+function saveNotes(notes) { notesStorage.save(notes); }
 
 // Standing fragment -> category rules, created only when a bulk
 // categorization (affecting more than one transaction) is confirmed —
@@ -1089,18 +1088,9 @@ function saveNotes(notes) {
 // transaction from that merchant. These are checked before the keyword
 // RULES list, but after a per-transaction override, when a transaction is
 // first categorized.
-function loadMerchantRules() {
-  try {
-    var raw = localStorage.getItem(MERCHANT_RULES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveMerchantRules(rules) {
-  localStorage.setItem(MERCHANT_RULES_KEY, JSON.stringify(rules));
-}
+var merchantRulesStorage = makeJSONStorage(MERCHANT_RULES_KEY, function () { return {}; });
+function loadMerchantRules() { return merchantRulesStorage.load(); }
+function saveMerchantRules(rules) { merchantRulesStorage.save(rules); }
 
 // Lets a transaction be counted in a different month than its real bank
 // date — e.g. a salary that landed a few days early and got grouped with
@@ -1108,23 +1098,16 @@ function saveMerchantRules(rules) {
 // and still what's exported/backed up as the transaction's own date);
 // this only affects which month bucket it's grouped into for totals,
 // charts, and filtering, keyed by transaction id like overrides/notes.
-function loadMonthOverrides() {
-  try {
-    var raw = localStorage.getItem(MONTH_OVERRIDES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveMonthOverrides(overrides) {
-  localStorage.setItem(MONTH_OVERRIDES_KEY, JSON.stringify(overrides));
-}
+var monthOverridesStorage = makeJSONStorage(MONTH_OVERRIDES_KEY, function () { return {}; });
+function loadMonthOverrides() { return monthOverridesStorage.load(); }
+function saveMonthOverrides(overrides) { monthOverridesStorage.save(overrides); }
 
 // Whether money amounts are currently blurred — a device-local display
 // preference, not part of the financial data itself, so deliberately not
 // included in backup/restore (no reason a backup file should dictate
 // whether numbers are visible when restored on a different device).
+// Stored as a raw 'true'/'false' string, not JSON, so it doesn't use the
+// shared JSON factory above.
 function loadPrivacyMode() {
   try {
     return localStorage.getItem(PRIVACY_MODE_KEY) === 'true';
@@ -1140,7 +1123,8 @@ function savePrivacyMode(enabled) {
 // When a CSV was last successfully uploaded — updates on every successful
 // upload attempt, even one that adds zero new transactions (everything
 // already saved), since the point is literally "when did I last try to
-// bring my data up to date," not "when did new data last show up."
+// bring my data up to date," not "when did new data last show up." Stored
+// as a raw ISO string, not JSON, so it doesn't use the shared factory.
 function loadLastUploadAt() {
   try {
     return localStorage.getItem(LAST_UPLOAD_KEY);
@@ -1167,6 +1151,10 @@ var DEFAULT_HOUSING_RULE = {
                          // > rentMax -> left uncategorized always
 };
 
+// Not on the shared JSON factory above since loading needs to MERGE the
+// saved value over DEFAULT_HOUSING_RULE (so an older backup saved before a
+// new field existed still gets that field's default) rather than just
+// returning the raw parsed JSON.
 function loadHousingRule() {
   try {
     var raw = localStorage.getItem(HOUSING_RULE_KEY);
@@ -1187,18 +1175,9 @@ function saveHousingRule(rule) {
 // picker in the app. Stored separately from customCategories since these
 // are categories the CODE defines, not ones the person created, so there's
 // nothing to remove from a list — only a name to suppress.
-function loadDisabledCategories() {
-  try {
-    var raw = localStorage.getItem(DISABLED_CATEGORIES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveDisabledCategories(list) {
-  localStorage.setItem(DISABLED_CATEGORIES_KEY, JSON.stringify(list));
-}
+var disabledCategoriesStorage = makeJSONStorage(DISABLED_CATEGORIES_KEY, function () { return []; });
+function loadDisabledCategories() { return disabledCategoriesStorage.load(); }
+function saveDisabledCategories(list) { disabledCategoriesStorage.save(list); }
 
 // { oldName: newName } — applied as a final translation step in
 // useLedgerData, AFTER every other categorization step (keyword rules,
@@ -1207,39 +1186,23 @@ function saveDisabledCategories(list) {
 // the old name, without needing to rewrite overrides/merchantRules/etc. in
 // place — the underlying stored category can stay exactly as it was, only
 // the displayed name changes.
-function loadCategoryRenames() {
-  try {
-    var raw = localStorage.getItem(CATEGORY_RENAMES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveCategoryRenames(renames) {
-  localStorage.setItem(CATEGORY_RENAMES_KEY, JSON.stringify(renames));
-}
+var categoryRenamesStorage = makeJSONStorage(CATEGORY_RENAMES_KEY, function () { return {}; });
+function loadCategoryRenames() { return categoryRenamesStorage.load(); }
+function saveCategoryRenames(renames) { categoryRenamesStorage.save(renames); }
 
 // { [category]: { added: [...], removed: [...] } } — see buildEffectiveRules
 // above for how this combines with BASE_RULES' default keywords.
-function loadKeywordOverrides() {
-  try {
-    var raw = localStorage.getItem(KEYWORD_OVERRIDES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveKeywordOverrides(overrides) {
-  localStorage.setItem(KEYWORD_OVERRIDES_KEY, JSON.stringify(overrides));
-}
+var keywordOverridesStorage = makeJSONStorage(KEYWORD_OVERRIDES_KEY, function () { return {}; });
+function loadKeywordOverrides() { return keywordOverridesStorage.load(); }
+function saveKeywordOverrides(overrides) { keywordOverridesStorage.save(overrides); }
 
 // The minimum transaction amount (paired with SALARY_SENDER_PATTERN) used
 // to recognize a salary deposit vs. a smaller, more frequent transfer from
 // the same sender — editable in Settings the same way the Housing transfer
 // rule's amount thresholds are, since this is also just a number someone
-// might need to adjust over time (e.g. if salary itself changes).
+// might need to adjust over time (e.g. if salary itself changes). Not on
+// the shared JSON factory since it needs numeric validation/clamping, not
+// just a JSON.parse with a static default.
 function loadSalaryMinAmount() {
   try {
     var raw = localStorage.getItem(SALARY_MIN_AMOUNT_KEY);
@@ -1261,18 +1224,9 @@ function saveSalaryMinAmount(amount) {
 // re-checking against (possibly since-changed) salaryMinAmount — so
 // raising or lowering the threshold only affects transactions that don't
 // have an entry yet, never ones already decided.
-function loadSalaryThresholdSnapshots() {
-  try {
-    var raw = localStorage.getItem(SALARY_THRESHOLD_SNAPSHOTS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveSalaryThresholdSnapshots(snapshots) {
-  localStorage.setItem(SALARY_THRESHOLD_SNAPSHOTS_KEY, JSON.stringify(snapshots));
-}
+var salaryThresholdSnapshotsStorage = makeJSONStorage(SALARY_THRESHOLD_SNAPSHOTS_KEY, function () { return {}; });
+function loadSalaryThresholdSnapshots() { return salaryThresholdSnapshotsStorage.load(); }
+function saveSalaryThresholdSnapshots(snapshots) { salaryThresholdSnapshotsStorage.save(snapshots); }
 
 // Builds a regex from the configured pattern string. CGD masks the middle
 // digits of an Mbway recipient's phone number with literal capital "X"
@@ -1457,8 +1411,8 @@ function TransactionRow(props) {
     : availableMonths;
 
   return h('div', { style: { borderBottom: '1px solid var(--border)', padding: '10px 0' } },
-    h('div', { style: { display: 'grid', gridTemplateColumns: '60px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 } },
-      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
+    h('div', { style: { display: 'grid', gridTemplateColumns: '88px 1fr 95px', gap: 10, alignItems: 'center', fontSize: 13 } },
+      h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--muted)' } }, formatDateWithYear(tx.dateMov)),
       h('span', {
         onClick: function () { setEditing(!editing); setCreating(false); setEditingNote(false); setEditingMonth(false); },
         style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', cursor: 'pointer' },
@@ -3430,8 +3384,8 @@ function OverviewScreen(props) {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   },
                 }, selectedIds[tx.id] ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
-                h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '50px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
-                  h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
+                h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '78px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
+                  h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDateWithYear(tx.dateMov)),
                   h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' } }, tx.description),
                   h('span', { style: { fontFamily: 'var(--mono)', textAlign: 'right', color: tx.amount > 0 ? 'var(--gain)' : 'var(--loss)' } },
                     tx.amount > 0 ? '+' : '', h(Money, { amount: tx.amount }))
@@ -3511,11 +3465,19 @@ function TrendsScreen(props) {
 
   var categoryTrend = useMemo(function () {
     if (!activeTrendCategory) return [];
-    // Salary and Investments aren't "spending" categories, so they're
-    // summed by their actual magnitude rather than filtered through
-    // isSpending() — a salary total should reflect every matching
-    // transaction that month, not be zeroed out because it's a credit.
-    var isSpecialCategory = activeTrendCategory === 'Salary' || activeTrendCategory === 'Investments';
+    // Salary, Investments, and the three transfer-mechanism categories
+    // (Income / Transfers In, Transfers (P2P), Transfer Out) all need
+    // their totals summed by magnitude rather than filtered through
+    // isSpending()/isReimbursement() — none of them are "spending" in the
+    // isSpending() sense (their transactions are typically positive
+    // credits, not negative debits), and the transfer-mechanism three are
+    // ALSO deliberately excluded from isReimbursement()'s reimbursement
+    // netting (see NON_REIMBURSABLE_CATEGORIES) since they describe HOW
+    // money moved, not WHAT it was for. Without this, a transaction in any
+    // of these categories would fall through every branch below and never
+    // get summed at all, showing as a flat 0 on the trend chart regardless
+    // of how much money actually moved.
+    var isSpecialCategory = NON_REIMBURSABLE_CATEGORIES.indexOf(activeTrendCategory) !== -1;
     // A single pass over every transaction, bucketed by month, rather than
     // re-scanning the full transaction list once per month — the previous
     // version was O(months × transactions); this is O(transactions).
@@ -3746,8 +3708,8 @@ function TransactionsScreen(props) {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 },
               }, selectedIds[tx.id] ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
-              h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '50px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
-                h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDate(tx.dateMov)),
+              h('div', { style: { flex: 1, display: 'grid', gridTemplateColumns: '78px 1fr 85px', gap: 8, fontSize: 12, alignItems: 'center' } },
+                h('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)' } }, formatDateWithYear(tx.dateMov)),
                 h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' } }, tx.description),
                 h('span', { style: { fontFamily: 'var(--mono)', textAlign: 'right', color: tx.amount > 0 ? 'var(--gain)' : 'var(--loss)' } },
                   tx.amount > 0 ? '+' : '', h(Money, { amount: tx.amount }))
@@ -3872,6 +3834,23 @@ function CategoryPickerSheet(props) {
   );
 }
 
+// The checkbox/radio marker + label shown in each row of MonthFilterSheet
+// and CategoryFilterSheet — the only real visual difference between the
+// two sheets' rows (besides what each row represents) is the marker shape:
+// MonthFilterSheet uses a rounded square (it's a multi-select checkbox),
+// CategoryFilterSheet uses a circle (it's a single-select radio button) —
+// so `borderRadius` stays a parameter rather than being hardcoded here.
+function SelectableRowMarker(props) {
+  return h('div', {
+    style: {
+      width: 20, height: 20, borderRadius: props.borderRadius, flexShrink: 0,
+      border: '2px solid ' + (props.isChecked ? 'var(--accent)' : 'var(--border)'),
+      background: props.isChecked ? 'var(--accent)' : 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    },
+  }, props.isChecked ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null);
+}
+
 function MonthFilterSheet(props) {
   return h(Sheet, { title: 'Filter by month', onClose: props.onClose },
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14, maxHeight: '50vh', overflowY: 'auto' } },
@@ -3881,14 +3860,7 @@ function MonthFilterSheet(props) {
           key: mk, onClick: function () { props.onToggle(mk); },
           style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
         },
-          h('div', {
-            style: {
-              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-              border: '2px solid ' + (isChecked ? 'var(--accent)' : 'var(--border)'),
-              background: isChecked ? 'var(--accent)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            },
-          }, isChecked ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+          h(SelectableRowMarker, { isChecked: isChecked, borderRadius: 6 }),
           h('span', { style: { fontSize: 13, color: 'var(--text)' } }, monthLabel(mk))
         );
       })
@@ -3922,14 +3894,7 @@ function CategoryFilterSheet(props) {
         onClick: function () { props.onSelect(null); },
         style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
       },
-        h('div', {
-          style: {
-            width: 20, height: 20, borderRadius: 10, flexShrink: 0,
-            border: '2px solid ' + (!props.selected ? 'var(--accent)' : 'var(--border)'),
-            background: !props.selected ? 'var(--accent)' : 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          },
-        }, !props.selected ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+        h(SelectableRowMarker, { isChecked: !props.selected, borderRadius: 10 }),
         h('span', { style: { fontSize: 13, color: 'var(--text)', fontWeight: 600 } }, 'All categories')
       ),
       props.categories.map(function (c) {
@@ -3938,14 +3903,7 @@ function CategoryFilterSheet(props) {
           key: c, onClick: function () { props.onSelect(c); },
           style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' },
         },
-          h('div', {
-            style: {
-              width: 20, height: 20, borderRadius: 10, flexShrink: 0,
-              border: '2px solid ' + (isChecked ? 'var(--accent)' : 'var(--border)'),
-              background: isChecked ? 'var(--accent)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            },
-          }, isChecked ? h('span', { style: { color: '#fff', fontSize: 12, fontWeight: 700 } }, '\u2713') : null),
+          h(SelectableRowMarker, { isChecked: isChecked, borderRadius: 10 }),
           h('span', { style: { fontSize: 13, color: 'var(--text)' } }, c)
         );
       })
@@ -4820,6 +4778,22 @@ var NAV_ITEMS = [
   { id: 'settings', icon: '\u2699\ufe0f', label: 'Settings' },
 ];
 
+// Captures a pattern repeated across several of App's handlers below:
+// update a piece of React state from its previous value, persist the new
+// value to storage, but skip persisting (and skip the state update
+// entirely, since returning the same `prev` reference is a no-op to
+// React) if `updateFn` decides nothing actually changed. `updateFn(prev)`
+// must return the unchanged `prev` reference itself (not just an
+// equal-looking new object) to signal "no change" — every call site below
+// already does this naturally by returning `prev` directly.
+function updateAndPersist(setState, saveFn, updateFn) {
+  setState(function (prev) {
+    var next = updateFn(prev);
+    if (next !== prev) saveFn(next);
+    return next;
+  });
+}
+
 function App() {
   var transactionsState = useState(function () { return Object.values(loadStoredTransactions()); });
   var transactions = transactionsState[0], setTransactions = transactionsState[1];
@@ -4866,11 +4840,7 @@ function App() {
   var salaryThresholdSnapshotsState = useState(function () { return loadSalaryThresholdSnapshots(); });
   var salaryThresholdSnapshots = salaryThresholdSnapshotsState[0], setSalaryThresholdSnapshots = salaryThresholdSnapshotsState[1];
   var handleSalarySnapshotsChange = useCallback(function (newEntries) {
-    setSalaryThresholdSnapshots(function (prev) {
-      var next = Object.assign({}, prev, newEntries);
-      saveSalaryThresholdSnapshots(next);
-      return next;
-    });
+    updateAndPersist(setSalaryThresholdSnapshots, saveSalaryThresholdSnapshots, function (prev) { return Object.assign({}, prev, newEntries); });
   }, []);
 
   // Lifted up from TransactionsScreen so the person's filter choices survive
@@ -5040,19 +5010,11 @@ function App() {
   }, []);
 
   var handlePrivacyToggle = useCallback(function () {
-    setPrivacyMode(function (prev) {
-      var next = !prev;
-      savePrivacyMode(next);
-      return next;
-    });
+    updateAndPersist(setPrivacyMode, savePrivacyMode, function (prev) { return !prev; });
   }, []);
 
   var handleHousingRuleChange = useCallback(function (updates) {
-    setHousingRule(function (prev) {
-      var next = Object.assign({}, prev, updates);
-      saveHousingRule(next);
-      return next;
-    });
+    updateAndPersist(setHousingRule, saveHousingRule, function (prev) { return Object.assign({}, prev, updates); });
   }, []);
 
   // Deletes a category, built-in or custom alike — both are handled the
@@ -5063,17 +5025,13 @@ function App() {
   // under it becomes Other. If it was a custom category, it's also removed
   // from customCategories so it doesn't linger there unused.
   var handleDeleteCategory = useCallback(function (category) {
-    setDisabledCategories(function (prev) {
+    updateAndPersist(setDisabledCategories, saveDisabledCategories, function (prev) {
       if (prev.indexOf(category) !== -1) return prev;
-      var next = prev.concat([category]);
-      saveDisabledCategories(next);
-      return next;
+      return prev.concat([category]);
     });
-    setCustomCategories(function (prev) {
+    updateAndPersist(setCustomCategories, saveCustomCategories, function (prev) {
       if (prev.indexOf(category) === -1) return prev;
-      var next = prev.filter(function (c) { return c !== category; });
-      saveCustomCategories(next);
-      return next;
+      return prev.filter(function (c) { return c !== category; });
     });
   }, []);
 
@@ -5086,31 +5044,27 @@ function App() {
   var handleRenameCategory = useCallback(function (oldName, newName) {
     var trimmed = newName.trim();
     if (!trimmed || trimmed === oldName) return;
-    setCategoryRenames(function (prev) {
+    updateAndPersist(setCategoryRenames, saveCategoryRenames, function (prev) {
       var next = {};
       Object.keys(prev).forEach(function (k) {
         next[k] = prev[k] === oldName ? trimmed : prev[k];
       });
       next[oldName] = trimmed;
-      saveCategoryRenames(next);
       return next;
     });
     // If the renamed category was a custom one, update its stored name too
     // so it doesn't show up twice (old name disabled-but-absent, new name
     // present) in places that read customCategories directly.
-    setCustomCategories(function (prev) {
+    updateAndPersist(setCustomCategories, saveCustomCategories, function (prev) {
       if (prev.indexOf(oldName) === -1) return prev;
-      var next = prev.map(function (c) { return c === oldName ? trimmed : c; });
-      saveCustomCategories(next);
-      return next;
+      return prev.map(function (c) { return c === oldName ? trimmed : c; });
     });
   }, []);
 
   var handleDeleteMerchantRule = useCallback(function (fragment) {
-    setMerchantRules(function (prev) {
+    updateAndPersist(setMerchantRules, saveMerchantRules, function (prev) {
       var next = Object.assign({}, prev);
       delete next[fragment];
-      saveMerchantRules(next);
       return next;
     });
   }, []);
@@ -5121,7 +5075,7 @@ function App() {
   var handleAddKeyword = useCallback(function (category, keyword) {
     var trimmed = keyword.trim();
     if (!trimmed) return;
-    setKeywordOverrides(function (prev) {
+    updateAndPersist(setKeywordOverrides, saveKeywordOverrides, function (prev) {
       var existing = prev[category] || { added: [], removed: [] };
       var removedLower = (existing.removed || []).map(function (k) { return k.toLowerCase(); });
       var nextRemoved = existing.removed || [];
@@ -5135,9 +5089,7 @@ function App() {
       // putting it in `added` would show it twice in the keyword list.
       // Only keywords that were never a default get appended to `added`.
       var nextAdded = wasRemovedDefault ? (existing.added || []) : (existing.added || []).concat([trimmed]);
-      var next = Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
-      saveKeywordOverrides(next);
-      return next;
+      return Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
     });
   }, []);
 
@@ -5147,15 +5099,13 @@ function App() {
   // `added` directly, since there's no need to separately "remove" a
   // keyword that was never a default in the first place).
   var handleRemoveKeyword = useCallback(function (category, keyword) {
-    setKeywordOverrides(function (prev) {
+    updateAndPersist(setKeywordOverrides, saveKeywordOverrides, function (prev) {
       var existing = prev[category] || { added: [], removed: [] };
       var nextAdded = (existing.added || []).filter(function (k) { return k.toLowerCase() !== keyword.toLowerCase(); });
       var wasInAdded = nextAdded.length !== (existing.added || []).length;
       var nextRemoved = existing.removed || [];
       if (!wasInAdded) nextRemoved = nextRemoved.concat([keyword]);
-      var next = Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
-      saveKeywordOverrides(next);
-      return next;
+      return Object.assign({}, prev, { [category]: { added: nextAdded, removed: nextRemoved } });
     });
   }, []);
 
