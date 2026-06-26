@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.7';
+var APP_VERSION = '1.27.8';
 
 var CHANGELOG = [
+  { version: '1.27.8', notes: [
+    'A pontuação mensal deixa de dividir os 3 fatores em peso igual: "Balance growth" passa a pesar só 15%, e "Net positive" e "Spending vs. usual" dividem os restantes 85% (42.5% cada). Se faltar "Balance growth", os outros dois ficam a 50%/50%.',
+  ]},
   { version: '1.27.7', notes: [
     'Corrigido o detalhe da pontuação: "Spending vs." mostrava um rácio confuso (ex: "+150%" quando na verdade significava "1.5x a média", ou seja, só 50% a mais) — agora mostra a verdadeira variação percentual, consistente com os outros dois fatores, com cor vermelha quando gastaste mais que o habitual',
   ]},
@@ -569,7 +572,7 @@ var FAQ_ITEMS = [
   { q: 'O que significam os n\u00fameros pequenos abaixo de Net this month, Salary, etc.?',
     a: 'Mostram a varia\u00e7\u00e3o desse valor face a tr\u00eas pontos de compara\u00e7\u00e3o: o m\u00eas anterior ("vs last month"), o mesmo m\u00eas do ano passado ("vs last year"), e a m\u00e9dia dos 12 meses anteriores ao m\u00eas atual ("vs 12mo avg"). Usa o interruptor "%" / "\u20ac" no topo do cart\u00e3o para alternar entre ver essas varia\u00e7\u00f5es em percentagem ou em valor absoluto em euros. Em "Spent", vermelho significa que gastaste mais do que no ponto de compara\u00e7\u00e3o, e verde significa que gastaste menos \u2014 o inverso das outras m\u00e9tricas, onde verde \u00e9 sempre "mais".' },
   { q: 'O que \u00e9 a pontua\u00e7\u00e3o (1 a 10) junto a "Net this month"?',
-    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina, em peso igual, tr\u00eas fatores: líquido positivo (quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (deliberadamente diferente do l\u00edquido positivo \u2014 dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, por isso podes ter um l\u00edquido excelente mas o saldo da conta crescer pouco); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator (por exemplo, ainda n\u00e3o tens m\u00eas anterior para comparar o saldo, ou ainda n\u00e3o tens m\u00e9dia de 12 meses), a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
+    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina tr\u00eas fatores, com pesos diferentes: l\u00edquido positivo (42.5% \u2014 quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (s\u00f3 15%, deliberadamente menos que os outros dois \u2014 deliberadamente diferente do l\u00edquido positivo, j\u00e1 que dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, e um \u00fanico movimento grande pode fazer este n\u00famero saltar de forma que n\u00e3o reflete bem o comportamento financeiro do dia a dia); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses (42.5%). Se faltar "Balance growth" (por exemplo, sem m\u00eas anterior para comparar), os outros dois ficam a 50%/50% entre si. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator, a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
   { q: 'Como \u00e9 calculada a m\u00e9dia dos 12 meses?',
     a: 'A m\u00e9dia inclui os 12 meses civis imediatamente antes do m\u00eas que est\u00e1s a ver \u2014 nunca o pr\u00f3prio m\u00eas atual. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico (por exemplo, s\u00f3 tens dados de 4 meses), a app usa a m\u00e9dia desses meses que existirem, em vez de esperar por um ano completo.' },
   { q: 'Porque \u00e9 que algumas compara\u00e7\u00f5es mostram "New" ou n\u00e3o aparecem nada?',
@@ -2598,9 +2601,14 @@ function scoreFactorFromPercent(pct, floorPct, ceilPct) {
   return (pct - floorPct) / (ceilPct - floorPct);
 }
 
-// A 1-10 financial health score for one month, from three equally-weighted
-// factors, each scored gradually (not pass/fail) on a 0-1 scale before
-// being combined:
+// A 1-10 financial health score for one month, from three factors —
+// net positive (42.5%) and spending vs. average (42.5%) weighted equally
+// and much more heavily than balance growth (15%), since balance growth
+// is the noisiest of the three (a single large one-off transfer, e.g.
+// into investments or a big purchase, can swing it sharply in a way that
+// doesn't reflect the month's everyday financial behavior the way the
+// other two factors do). Each factor is scored gradually (not pass/fail)
+// on a 0-1 scale before being combined:
 //   - net positive: this month's net-left-of-income percentage (0% or
 //     below scores 0; 30% or above scores the factor's full weight)
 //   - balance growth: (this month's ending account balance − last month's)
@@ -2614,8 +2622,13 @@ function scoreFactorFromPercent(pct, floorPct, ceilPct) {
 // Any factor that can't be computed (e.g. no prior month to compare
 // balances against, or no trailing average yet for a new user) is left
 // out entirely, and the remaining factors' weights are redistributed
-// proportionally — never penalizing a month for missing data it
-// couldn't possibly have.
+// proportionally (dividing by the sum of only the weights actually
+// present) — never penalizing a month for missing data it couldn't
+// possibly have. E.g. missing balanceGrowth leaves netPositive and
+// spendingVsAverage at equal weight relative to each other (0.425 and
+// 0.425 normalize to 50%/50%), rather than introducing some other split.
+var SCORE_FACTOR_WEIGHTS = { netPositive: 0.425, balanceGrowth: 0.15, spendingVsAverage: 0.425 };
+
 function computeMonthlyScore(categorized, monthlyTotals, mk) {
   var currentMetrics = summaryMetricsForMonth(categorized, mk);
   if (!currentMetrics.hasAnyData) return null;
@@ -2626,7 +2639,7 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
     ? (currentMetrics.netBalance / (currentMetrics.salaryIncome + currentMetrics.otherIncome)) * 100
     : null;
   var netPositiveScore = scoreFactorFromPercent(netLeftPct, 0, 30);
-  if (netPositiveScore !== null) factors.push({ key: 'netPositive', score: netPositiveScore, value: netLeftPct });
+  if (netPositiveScore !== null) factors.push({ key: 'netPositive', score: netPositiveScore, value: netLeftPct, weight: SCORE_FACTOR_WEIGHTS.netPositive });
 
   var prevMk = previousMonthKey(mk);
   var thisMonthBalance = monthlyTotals[mk] ? monthlyTotals[mk].lastBalance : null;
@@ -2636,7 +2649,7 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
     ? ((thisMonthBalance - prevMonthBalance) / totalIncome) * 100
     : null;
   var balanceGrowthScore = scoreFactorFromPercent(balanceGrowthPct, 0, 30);
-  if (balanceGrowthScore !== null) factors.push({ key: 'balanceGrowth', score: balanceGrowthScore, value: balanceGrowthPct });
+  if (balanceGrowthScore !== null) factors.push({ key: 'balanceGrowth', score: balanceGrowthScore, value: balanceGrowthPct, weight: SCORE_FACTOR_WEIGHTS.balanceGrowth });
 
   var trailingAvg = trailing12MonthAverage(categorized, mk);
   var spendingVsAvgPct = trailingAvg.hasAnyData && trailingAvg.totalSpent > 0
@@ -2655,11 +2668,12 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
   // consistent with how the other two factors are shown (a true
   // percentage change), even though the underlying ratio is used for the
   // actual 0-1 scoring math just above.
-  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: spendingVsAvgPct - 100 });
+  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: spendingVsAvgPct - 100, weight: SCORE_FACTOR_WEIGHTS.spendingVsAverage });
 
   if (factors.length === 0) return null;
 
-  var totalScore01 = factors.reduce(function (sum, f) { return sum + f.score; }, 0) / factors.length;
+  var totalWeight = factors.reduce(function (sum, f) { return sum + f.weight; }, 0);
+  var totalScore01 = factors.reduce(function (sum, f) { return sum + f.score * f.weight; }, 0) / totalWeight;
   // 0-1 combined score maps onto 1-10 (never below 1, so an entirely bad
   // month still reads as "1" rather than a slightly alarming "0").
   var score10 = 1 + totalScore01 * 9;
