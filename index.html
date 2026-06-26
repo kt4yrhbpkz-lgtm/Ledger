@@ -232,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.13';
+var APP_VERSION = '1.27.14';
 
 var CHANGELOG = [
+  { version: '1.27.14', notes: [
+    'Quando o saldo da conta desce e o valor investido nesse mês cobre essa descida, o fator "Balance growth" da pontuação mensal é agora ignorado por completo, em vez de penalizar — mover dinheiro para investimentos é uma escolha, não um prejuízo. Só se aplica quando o saldo realmente desce; se o saldo continuar a subir (mesmo menos do que esperado), o fator nunca é ignorado.',
+    'A pontuação mensal mostra agora 3 letras discretas (N/B/S) sempre visíveis junto ao número, mesmo com o detalhe fechado — verde, amarelo, ou vermelho conforme o estado de cada fator, e cinzento quando esse fator não conta esse mês (sem histórico suficiente, ou ignorado pela regra acima).',
+  ]},
   { version: '1.27.13', notes: [
     'Corrigido um problema importante: renomear uma categoria (especialmente uma especial como Rent, Salary, ou Investments) podia quebrar o sistema de formas subtis — a proteção contra apagar deixava de funcionar para a categoria renomeada, os cálculos financeiros podiam ficar incorretos, e editar palavras-chave ou o limiar do salário deixava de funcionar para a categoria renomeada.',
     'Agora a renomeação é puramente visual em toda a app: o nome real interno nunca muda (toda a lógica financeira, proteções, e regras continuam a funcionar exatamente da mesma forma), só o texto mostrado é traduzido — incluindo a ordenação alfabética de categorias, que passa a ordenar pelo nome mostrado.',
@@ -590,7 +594,7 @@ var FAQ_ITEMS = [
   { q: 'Como ordeno as transa\u00e7\u00f5es por valor em vez de data?',
     a: 'No Resumo, junto ao t\u00edtulo "Transactions (N)", toca em "Price" para ordenar pelo maior valor absoluto primeiro \u2014 \u00fatil para encontrares rapidamente as maiores despesas ou recebimentos do m\u00eas, sem teres de percorrer tudo por data. Toca em "Date" para voltar \u00e0 ordem por data (mais recente primeiro), que continua a ser a predefinida.' },
   { q: 'O que \u00e9 a pontua\u00e7\u00e3o (1 a 10) junto a "Net this month"?',
-    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina tr\u00eas fatores, com pesos diferentes: l\u00edquido positivo (42.5% \u2014 quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (s\u00f3 15%, deliberadamente menos que os outros dois \u2014 deliberadamente diferente do l\u00edquido positivo, j\u00e1 que dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, e um \u00fanico movimento grande pode fazer este n\u00famero saltar de forma que n\u00e3o reflete bem o comportamento financeiro do dia a dia); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses (42.5%). Se faltar "Balance growth" (por exemplo, sem m\u00eas anterior para comparar), os outros dois ficam a 50%/50% entre si. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator, a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
+    a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Junto ao n\u00famero v\u00eas sempre 3 letras pequenas \u2014 N (Net positive), B (Balance growth), S (Spending vs. usual) \u2014 a verde, amarelo ou vermelho conforme o estado de cada, mesmo sem abrir o detalhe; cinzento significa que esse fator n\u00e3o contou esse m\u00eas. Toca na pontua\u00e7\u00e3o para ver o detalhe completo. Combina tr\u00eas fatores, com pesos diferentes: l\u00edquido positivo (42.5% \u2014 quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (s\u00f3 15%, deliberadamente menos que os outros dois \u2014 dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, e um \u00fanico movimento grande pode fazer este n\u00famero saltar de forma que n\u00e3o reflete bem o comportamento financeiro do dia a dia); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses (42.5%). Se o saldo da conta descer este m\u00eas E o valor que investiste cobrir essa descida, o "Balance growth" \u00e9 ignorado por completo nesse m\u00eas (a letra B aparece cinzenta) \u2014 s\u00f3 se aplica quando o saldo realmente desce; se continuar a subir, mesmo menos do que esperavas, nunca \u00e9 ignorado. Se faltar "Balance growth" por outro motivo (por exemplo, sem m\u00eas anterior para comparar), os outros dois ficam a 50%/50% entre si. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso.' },
   { q: 'Como \u00e9 calculada a m\u00e9dia dos 12 meses?',
     a: 'A m\u00e9dia inclui os 12 meses civis imediatamente antes do m\u00eas que est\u00e1s a ver \u2014 nunca o pr\u00f3prio m\u00eas atual. Se ainda n\u00e3o tiveres 12 meses de hist\u00f3rico (por exemplo, s\u00f3 tens dados de 4 meses), a app usa a m\u00e9dia desses meses que existirem, em vez de esperar por um ano completo.' },
   { q: 'Porque \u00e9 que algumas compara\u00e7\u00f5es mostram "New" ou n\u00e3o aparecem nada?',
@@ -2619,7 +2623,17 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
   var balanceGrowthPct = (thisMonthBalance !== null && prevMonthBalance !== null && totalIncome > 0)
     ? ((thisMonthBalance - prevMonthBalance) / totalIncome) * 100
     : null;
-  var balanceGrowthScore = scoreFactorFromPercent(balanceGrowthPct, 0, 30);
+  // Excluded entirely (not just adjusted) when the balance actually
+  // DROPPED this month AND the amount moved into Investments that same
+  // month covers the drop — money sent to an investment still leaves the
+  // bank account, but it's a deliberate choice, not money that's gone, so
+  // it shouldn't read as a bad month on this factor. Deliberately NOT
+  // triggered when the balance still grew, even by less than the invested
+  // amount might suggest — only an actual decrease counts, regardless of
+  // how much was invested that month.
+  var balanceDropped = thisMonthBalance !== null && prevMonthBalance !== null && (thisMonthBalance - prevMonthBalance) < 0;
+  var balanceDropCoveredByInvesting = balanceDropped && currentMetrics.invested >= Math.abs(thisMonthBalance - prevMonthBalance);
+  var balanceGrowthScore = balanceDropCoveredByInvesting ? null : scoreFactorFromPercent(balanceGrowthPct, 0, 30);
   if (balanceGrowthScore !== null) factors.push({ key: 'balanceGrowth', score: balanceGrowthScore, value: balanceGrowthPct, weight: SCORE_FACTOR_WEIGHTS.balanceGrowth });
 
   var trailingAvg = trailing12MonthAverage(categorized, mk);
@@ -2652,6 +2666,7 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
   return {
     score: Math.round(score10 * 10) / 10,
     factors: factors,
+    balanceGrowthExcludedByInvesting: balanceDropCoveredByInvesting,
   };
 }
 
@@ -3224,7 +3239,27 @@ function OverviewScreen(props) {
                 color: monthlyScore.score >= 7 ? 'var(--gain)' : monthlyScore.score >= 4 ? 'var(--text)' : 'var(--loss)',
               },
             }, monthlyScore.score.toFixed(1)),
-            h('span', { style: { fontSize: 9, color: 'var(--muted)' } }, '/ 10')
+            h('span', { style: { fontSize: 9, color: 'var(--muted)' } }, '/ 10'),
+            // Discrete N/B/S indicator — stays visible even with the detail
+            // collapsed, so the three factors behind the score are always
+            // at least glanceable without needing to tap through. Each
+            // letter's color is that factor's own 0-1 score (red below
+            // 0.33, yellow 0.33–0.66, green above 0.66); neutral gray means
+            // that factor didn't contribute this month at all — either no
+            // data yet (e.g. no prior month to compare a balance against)
+            // or, for B specifically, deliberately excluded because the
+            // amount invested that month covers a balance drop.
+            h('div', { style: { display: 'flex', gap: 3, marginTop: 2 } },
+              ['netPositive', 'balanceGrowth', 'spendingVsAverage'].map(function (key) {
+                var letter = key === 'netPositive' ? 'N' : key === 'balanceGrowth' ? 'B' : 'S';
+                var factor = monthlyScore.factors.find(function (f) { return f.key === key; });
+                var color = !factor ? 'var(--muted)' : factor.score > 0.66 ? 'var(--gain)' : factor.score > 0.33 ? 'var(--accent2)' : 'var(--loss)';
+                return h('span', {
+                  key: key,
+                  style: { fontSize: 8, fontWeight: 700, color: color, opacity: factor ? 1 : 0.5 },
+                }, letter);
+              })
+            )
           ) : null,
           h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2 } },
             h('button', {
@@ -3273,7 +3308,9 @@ function OverviewScreen(props) {
         }),
         h('div', { style: { color: 'var(--muted)', fontSize: 11, marginTop: 2, lineHeight: 1.4 } },
           'Spending vs. usual: 0% means you spent exactly your typical amount; negative means you spent less than usual (good), positive means more (worse).'),
-        monthlyScore.factors.length < 3 ? h('div', { style: { color: 'var(--muted)', fontSize: 11 } },
+        monthlyScore.balanceGrowthExcludedByInvesting ? h('div', { style: { color: 'var(--muted)', fontSize: 11, lineHeight: 1.4 } },
+          'Balance growth skipped this month \u2014 your account balance dropped, but the amount you invested covers the drop, so it isn\u2019t counted against you.') : null,
+        (monthlyScore.factors.length < 3 && !monthlyScore.balanceGrowthExcludedByInvesting) ? h('div', { style: { color: 'var(--muted)', fontSize: 11 } },
           'Calculated from ' + monthlyScore.factors.length + ' of 3 factors \u2014 the rest need more history to compare against.') : null
       ) : null,
       h('div', { style: { height: 1, background: 'var(--border)' } }),
