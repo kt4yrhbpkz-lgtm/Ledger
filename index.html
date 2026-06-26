@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.11';
+var APP_VERSION = '1.27.12';
 
 var CHANGELOG = [
+  { version: '1.27.12', notes: [
+    'No Resumo, a lista de transações pode agora ordenar por "Date" (mais recente primeiro, como já era) ou "Price" (maior valor absoluto primeiro, para encontrar rapidamente as maiores despesas ou recebimentos do mês) — o controlo aparece junto ao título "Transactions (N)"',
+  ]},
   { version: '1.27.11', notes: [
     'Simplificação interna do código, sem alterar nenhum comportamento visível: as funções de guardar/carregar dados repetitivas foram unificadas numa só base comum, vários handlers de "atualizar e guardar" passaram a partilhar a mesma lógica, e os dois filtros (por mês e por categoria) passaram a partilhar o mesmo componente visual de seleção. Confirmado com a suite de testes completa e novos testes de geometria sem qualquer regressão.',
   ]},
@@ -580,6 +583,8 @@ var FAQ_ITEMS = [
     a: 'Isto era um bug real, já corrigido. O identificador interno de cada transação mudou de formato numa versão anterior da app (para resolver outro problema, de transações genuinamente diferentes no mesmo dia a colidirem). Transações guardadas antes dessa mudança ficaram com um identificador num formato antigo, que deixou de coincidir com o identificador gerado ao reimportar o mesmo ficheiro depois da atualização \u2014 por isso eram tratadas como novas em vez de já existentes. A partir desta versão, a app também verifica pela data, valor e descrição da transação, não só pelo identificador, por isso volta a reconhecer corretamente transações já guardadas mesmo que tenham um identificador de uma versão mais antiga. Se já tiveres duplicados de antes desta correção, terás de os remover manualmente \u2014 a app não os apaga automaticamente, para nunca arriscar apagar algo por engano.' },
   { q: 'O que significam os n\u00fameros pequenos abaixo de Net this month, Salary, etc.?',
     a: 'Mostram a varia\u00e7\u00e3o desse valor face a tr\u00eas pontos de compara\u00e7\u00e3o: o m\u00eas anterior ("vs last month"), o mesmo m\u00eas do ano passado ("vs last year"), e a m\u00e9dia dos 12 meses anteriores ao m\u00eas atual ("vs 12mo avg"). Usa o interruptor "%" / "\u20ac" no topo do cart\u00e3o para alternar entre ver essas varia\u00e7\u00f5es em percentagem ou em valor absoluto em euros. Em "Spent", vermelho significa que gastaste mais do que no ponto de compara\u00e7\u00e3o, e verde significa que gastaste menos \u2014 o inverso das outras m\u00e9tricas, onde verde \u00e9 sempre "mais".' },
+  { q: 'Como ordeno as transa\u00e7\u00f5es por valor em vez de data?',
+    a: 'No Resumo, junto ao t\u00edtulo "Transactions (N)", toca em "Price" para ordenar pelo maior valor absoluto primeiro \u2014 \u00fatil para encontrares rapidamente as maiores despesas ou recebimentos do m\u00eas, sem teres de percorrer tudo por data. Toca em "Date" para voltar \u00e0 ordem por data (mais recente primeiro), que continua a ser a predefinida.' },
   { q: 'O que \u00e9 a pontua\u00e7\u00e3o (1 a 10) junto a "Net this month"?',
     a: 'Um resumo r\u00e1pido de como o m\u00eas est\u00e1 a correr, de 1 a 10. Toca na pontua\u00e7\u00e3o para ver o detalhe. Combina tr\u00eas fatores, com pesos diferentes: l\u00edquido positivo (42.5% \u2014 quanto do que ganhaste ainda n\u00e3o gastaste); crescimento do saldo real da conta em rela\u00e7\u00e3o ao que ganhaste esse m\u00eas (s\u00f3 15%, deliberadamente menos que os outros dois \u2014 deliberadamente diferente do l\u00edquido positivo, j\u00e1 que dinheiro que mandaste para investimentos sai da conta mesmo sendo uma escolha tua, e um \u00fanico movimento grande pode fazer este n\u00famero saltar de forma que n\u00e3o reflete bem o comportamento financeiro do dia a dia); e gastos deste m\u00eas comparados com a m\u00e9dia dos \u00faltimos 12 meses (42.5%). Se faltar "Balance growth" (por exemplo, sem m\u00eas anterior para comparar), os outros dois ficam a 50%/50% entre si. No detalhe, a percentagem de "Spending vs. usual" é a variação real face ao habitual \u2014 0% significa que gastaste exatamente a tua média, -50% significa que gastaste metade do habitual (bom, mostrado a verde), e +50% significa que gastaste 50% mais que o habitual (mostrado a vermelho, já que para este fator gastar mais é pior). Cada fator vale pontua\u00e7\u00e3o m\u00e1xima a partir de certo ponto (n\u00e3o precisas de ser perfeito para pontuar bem) e cresce gradualmente antes disso. Se faltar histórico para calcular algum fator, a pontua\u00e7\u00e3o usa só os fatores dispon\u00edveis, sem penalizar pelo que falta.' },
   { q: 'Como \u00e9 calculada a m\u00e9dia dos 12 meses?',
@@ -2850,6 +2855,12 @@ function OverviewScreen(props) {
   var categoryFilter = categoryFilterState[0], setCategoryFilter = categoryFilterState[1];
   var summaryFilterState = useState(null); // null | 'salary' | 'otherIncome' | 'invested' | 'investmentWithdrawals'
   var summaryFilter = summaryFilterState[0], setSummaryFilter = summaryFilterState[1];
+  // 'date' (most recent first, the long-standing default) | 'price' (largest
+  // absolute amount first, so the biggest expenses surface regardless of
+  // when they happened) — always in the direction that's most useful for
+  // each, never independently reversible, per the confirmed design.
+  var txSortByState = useState('date');
+  var txSortBy = txSortByState[0], setTxSortBy = txSortByState[1];
   var comparisonModeState = useState('percent'); // 'percent' | 'absolute'
   var comparisonMode = comparisonModeState[0], setComparisonMode = comparisonModeState[1];
   var searchTextState = useState('');
@@ -3088,12 +3099,20 @@ function OverviewScreen(props) {
     else base = monthTx;
 
     var q = searchText.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(function (tx) {
+    var filtered = !q ? base : base.filter(function (tx) {
       var haystack = (tx.description + ' ' + tx.category + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
       return haystack.indexOf(q) !== -1;
     });
-  }, [monthTx, categoryFilter, summaryFilter, searchText, props.notes]);
+
+    if (txSortBy === 'price') {
+      return filtered.slice().sort(function (a, b) { return Math.abs(b.amount) - Math.abs(a.amount); });
+    }
+    // 'date': monthTx is already sorted most-recent-first, and filtering
+    // above never changes relative order, so no re-sort is needed here —
+    // but sorting explicitly anyway keeps this in sync if monthTx's own
+    // sort or this function's filtering logic ever changes independently.
+    return filtered.slice().sort(function (a, b) { return a.dateMov < b.dateMov ? 1 : -1; });
+  }, [monthTx, categoryFilter, summaryFilter, searchText, props.notes, txSortBy]);
 
   var activeFilterLabel = summaryFilter === 'salary' ? 'Salary'
     : summaryFilter === 'otherIncome' ? 'Other income'
@@ -3340,6 +3359,26 @@ function OverviewScreen(props) {
       },
         h('p', { className: 'section-title', style: { margin: 0, flex: 1 } },
           'Transactions (' + visibleTx.length + ')' + (activeFilterLabel ? ' \u2014 ' + activeFilterLabel : ' \u2014 tap one to recategorize')),
+        h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2, flexShrink: 0 } },
+          h('button', {
+            onClick: function () { setTxSortBy('date'); },
+            style: {
+              fontSize: 10, padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: txSortBy === 'date' ? 'var(--surface)' : 'transparent',
+              color: txSortBy === 'date' ? 'var(--text)' : 'var(--muted)',
+              fontWeight: txSortBy === 'date' ? 600 : 400,
+            },
+          }, 'Date'),
+          h('button', {
+            onClick: function () { setTxSortBy('price'); },
+            style: {
+              fontSize: 10, padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: txSortBy === 'price' ? 'var(--surface)' : 'transparent',
+              color: txSortBy === 'price' ? 'var(--text)' : 'var(--muted)',
+              fontWeight: txSortBy === 'price' ? 600 : 400,
+            },
+          }, 'Price')
+        ),
         h('button', {
           className: 'btn-secondary',
           style: {
