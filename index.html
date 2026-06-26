@@ -232,9 +232,17 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.2';
+var APP_VERSION = '1.27.4';
 
 var CHANGELOG = [
+  { version: '1.27.4', notes: [
+    'O limiar do Salário deixa de afetar transações já vistas: cada transação fixa a sua decisão (é ou não é salário) na primeira vez que aparece, e mudar o valor depois só afeta transações novas — o histórico já validado fica intacto mesmo se o teu ordenado subir ou descer',
+    'Backup e restore passam a incluir o limiar do Salário, as palavras-chave editadas, e estas decisões fixadas — restaurar um backup antigo não volta a reclassificar nada com os valores atuais',
+  ]},
+  { version: '1.27.3', notes: [
+    'Já é possível adicionar palavras-chave a categorias que ainda não tinham nenhuma regra (ex: categorias personalizadas como Barber) — o campo para adicionar palavras-chave aparece agora mesmo quando a categoria está vazia, e as palavras-chave novas passam a categorizar transações automaticamente',
+    'Em caso de conflito, as regras incorporadas mantêm sempre prioridade: uma palavra-chave nova numa categoria personalizada só se aplica a transações que nenhuma regra incorporada já apanha',
+  ]},
   { version: '1.27.2', notes: [
     'Rent, Credit Card Payment e Utilities passam a estar permanentemente protegidas contra apagar (tal como Other, Salary e Investments), mesmo com a Housing transfer rule desativada — a lógica que as produz existe sempre no código, por isso apagá-las nunca seria uma remoção real. Continuam a poder ser renomeadas.',
   ]},
@@ -565,8 +573,8 @@ var FAQ_ITEMS = [
     a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary, Investments, Rent, Credit Card Payment e Utilities não podem ser apagadas, porque têm lógica própria noutras partes da app que continua a existir mesmo que a categoria "desaparecesse" — mas podem ser renomeadas livremente.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
-  { q: 'Como edito as palavras-chave de uma categoria incorporada (ex: Restaurants, Fuel)?',
-    a: 'Em Definições → "Categories", toca na categoria que queres editar. Em "Automatic categorization rules" (mais abaixo), aparecem as palavras-chave dessa categoria, cada uma com um "×" para remover. Podes adicionar novas palavras-chave no campo abaixo da lista. Isto funciona para a maioria das categorias incorporadas, incluindo as originais — as alterações ficam guardadas e podes sempre voltar a adicionar uma palavra-chave que removeste. 4 categorias (Income / Transfers In, a regra específica de Mbway da Housing, Card Purchase (uncategorized), Transfer Out) usam padrões mais complexos do que uma lista de palavras e não são editáveis por aqui, só visíveis para referência. Ao filtrar por "Salary", em vez de palavras-chave vês o valor mínimo necessário para uma transferência ser reconhecida como salário — também ajustável aí.' },
+  { q: 'Como edito as palavras-chave de uma categoria (ex: Restaurants, Fuel, ou uma personalizada)?',
+    a: 'Em Definições → "Categories", toca na categoria que queres editar. Em "Automatic categorization rules" (mais abaixo), aparecem as palavras-chave dessa categoria, cada uma com um "×" para remover. Podes adicionar novas palavras-chave no campo abaixo da lista. Isto funciona para a maioria das categorias incorporadas (incluindo as originais) e também para categorias personalizadas que ainda não tinham palavras-chave nenhumas — nesse caso, a primeira palavra-chave que adicionares começa a categorizar transações automaticamente, incluindo transações antigas já existentes. As alterações ficam guardadas e podes sempre voltar a adicionar uma palavra-chave que removeste. Em caso de conflito (a mesma palavra em duas categorias), as regras incorporadas têm sempre prioridade — uma palavra-chave numa categoria personalizada só se aplica a transações que nenhuma regra incorporada já apanha. 4 categorias (Income / Transfers In, a regra específica de Mbway da Housing, Card Purchase (uncategorized), Transfer Out) usam padrões mais complexos do que uma lista de palavras e não são editáveis por aqui, só visíveis para referência. Ao filtrar por "Salary", em vez de palavras-chave vês o valor mínimo necessário para uma transferência ser reconhecida como salário — também ajustável aí, mas com uma diferença importante face às palavras-chave: mudar este valor NUNCA reclassifica transações que a app já viu antes (cada transação fixa a sua decisão de "é ou não salário" logo na primeira vez), só afeta transações novas a partir daí. Isto evita que um aumento (ou redução) do teu ordenado mude retroativamente meses já validados.' },
   { q: 'Como funciona a "Housing transfer rule"?',
     a: 'Em Defini\u00e7\u00f5es, ativa esta regra para dividir automaticamente as transfer\u00eancias para a mesma pessoa (ex: o teu companheiro/a de casa) em tr\u00eas categorias, com base no valor: a maior do m\u00eas (entre o limite de Credit Card e o de Rent) fica Rent; valores m\u00e9dios ficam Credit Card Payment; valores pequenos ficam Utilities. Se houver uma transfer\u00eancia acima do limite de Rent, ou uma segunda na faixa de Rent no mesmo m\u00eas, fica sem categoria para revisares em "Categorize merchants" \u2014 nunca \u00e9 adivinhada automaticamente. Os limites (100\u20ac, 500\u20ac, 600\u20ac por defeito) podem ser ajustados em Defini\u00e7\u00f5es. Este destinat\u00e1rio fica exclu\u00eddo do "Apply to all" em massa, j\u00e1 que uma \u00fanica categoria para todas as transfer\u00eancias anularia o prop\u00f3sito da regra \u2014 corrige cada transa\u00e7\u00e3o individualmente se precisares.' },
   { q: 'O que faz o botão "Credits" no Resumo?',
@@ -755,7 +763,7 @@ function buildKeywordRegex(keywords) {
 // person typed the original casing back.
 function buildEffectiveRules(overrides) {
   overrides = overrides || {};
-  return BASE_RULES.map(function (rule) {
+  var baseDerived = BASE_RULES.map(function (rule) {
     if (!rule.keywords) return rule; // structural-pattern rule, passed through as-is
     var override = overrides[rule.category];
     var keywords = rule.keywords;
@@ -767,6 +775,25 @@ function buildEffectiveRules(overrides) {
     var regex = buildKeywordRegex(keywords);
     return { category: rule.category, keywords: keywords, test: function (d) { return regex.test(d); } };
   });
+
+  // Categories that exist ONLY in overrides (a person added keywords to a
+  // category — e.g. a custom one like "Barber" — that never had a
+  // BASE_RULES entry at all) get their own rule appended AFTER every
+  // built-in one. This means an existing built-in rule always wins a
+  // conflict over a newly-added custom-category keyword — a person adding
+  // "TROPICA" to "Barber" shouldn't suddenly steal transactions away from
+  // the established Restaurants rule that already matches it.
+  var baseCategories = BASE_RULES.map(function (r) { return r.category; });
+  var customDerived = Object.keys(overrides)
+    .filter(function (category) { return baseCategories.indexOf(category) === -1; })
+    .filter(function (category) { return (overrides[category].added || []).length > 0; })
+    .map(function (category) {
+      var keywords = overrides[category].added || [];
+      var regex = buildKeywordRegex(keywords);
+      return { category: category, keywords: keywords, test: function (d) { return regex.test(d); } };
+    });
+
+  return baseDerived.concat(customDerived);
 }
 
 // Categories that are negative cash flow but represent savings/investment
@@ -794,9 +821,9 @@ function merchantFragment(description) {
 var SALARY_SENDER_PATTERN = /TFI JOANA FILIPA TAVA/i;
 var SALARY_MIN_AMOUNT = 1500;
 
-function autoCategory(description, amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount) {
+function autoCategory(description, amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount, skipSalaryCheck) {
   var minAmount = typeof salaryMinAmount === 'number' ? salaryMinAmount : SALARY_MIN_AMOUNT;
-  if (typeof amount === 'number' && amount >= minAmount && SALARY_SENDER_PATTERN.test(description)) {
+  if (!skipSalaryCheck && typeof amount === 'number' && amount >= minAmount && SALARY_SENDER_PATTERN.test(description)) {
     return 'Salary';
   }
   // A standing rule from a past bulk-categorization takes priority over the
@@ -981,6 +1008,7 @@ var DISABLED_CATEGORIES_KEY = 'ledger:disabled-categories';
 var CATEGORY_RENAMES_KEY = 'ledger:category-renames';
 var KEYWORD_OVERRIDES_KEY = 'ledger:keyword-overrides';
 var SALARY_MIN_AMOUNT_KEY = 'ledger:salary-min-amount';
+var SALARY_THRESHOLD_SNAPSHOTS_KEY = 'ledger:salary-threshold-snapshots';
 
 function loadStoredTransactions() {
   try {
@@ -1208,6 +1236,26 @@ function loadSalaryMinAmount() {
 
 function saveSalaryMinAmount(amount) {
   localStorage.setItem(SALARY_MIN_AMOUNT_KEY, String(amount));
+}
+
+// { [transactionId]: true | false } — true means this transaction was
+// decided to BE a salary deposit the first time it was ever processed;
+// false means it was decided NOT to be one. Either way, once a transaction
+// has an entry here, future renders reuse this answer instead of
+// re-checking against (possibly since-changed) salaryMinAmount — so
+// raising or lowering the threshold only affects transactions that don't
+// have an entry yet, never ones already decided.
+function loadSalaryThresholdSnapshots() {
+  try {
+    var raw = localStorage.getItem(SALARY_THRESHOLD_SNAPSHOTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveSalaryThresholdSnapshots(snapshots) {
+  localStorage.setItem(SALARY_THRESHOLD_SNAPSHOTS_KEY, JSON.stringify(snapshots));
 }
 
 // Builds a regex from the configured pattern string. CGD masks the middle
@@ -2239,7 +2287,7 @@ function StaleDataBanner(props) {
 
 // --- Shared data hook --------------------------------------------------
 
-function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount) {
+function useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount, salaryThresholdSnapshots, onSalarySnapshotsChange) {
   // Built once per render (memoized on keywordOverrides itself, which only
   // changes when the person actually edits a category's keywords in
   // Settings) rather than once per transaction — autoCategory() is called
@@ -2249,12 +2297,52 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
     return buildEffectiveRules(keywordOverrides);
   }, [keywordOverrides]);
 
+  // The salary threshold's first-ever decision for each transaction is
+  // frozen here, separately from `overrides` (a real, person-made manual
+  // choice) and separately from keyword rules (which DO keep recalculating
+  // when edited — only this specific threshold needed the opposite
+  // behavior). The reasoning: a person's income can rise over time, and
+  // raising SALARY_MIN_AMOUNT to match shouldn't retroactively flip a
+  // salary deposit from months ago — by then they've already reviewed and
+  // accepted that classification, so changing the threshold should only
+  // affect transactions the app hasn't decided on yet.
+  //
+  // New snapshot entries are reported back via onSalarySnapshotsChange so
+  // the caller can persist them — this hook itself has no localStorage
+  // access, staying a pure function of its inputs like the rest of the
+  // app's data layer.
+  useEffect(function () {
+    if (!onSalarySnapshotsChange) return;
+    var newEntries = null;
+    transactions.forEach(function (tx) {
+      if (overrides[tx.id] !== undefined) return; // a real manual override always wins regardless; no snapshot needed
+      if (salaryThresholdSnapshots && tx.id in salaryThresholdSnapshots) return; // already decided once
+      var minAmount = typeof salaryMinAmount === 'number' ? salaryMinAmount : SALARY_MIN_AMOUNT;
+      var isSalary = typeof tx.amount === 'number' && tx.amount >= minAmount && SALARY_SENDER_PATTERN.test(tx.description);
+      if (!newEntries) newEntries = {};
+      newEntries[tx.id] = isSalary;
+    });
+    if (newEntries) onSalarySnapshotsChange(newEntries);
+  }, [transactions, overrides, salaryMinAmount, salaryThresholdSnapshots, onSalarySnapshotsChange]);
+
   var baseCategorized = useMemo(function () {
     return transactions.map(function (tx) {
       var override = overrides[tx.id];
       var monthOverride = monthOverrides ? monthOverrides[tx.id] : null;
+      var category;
+      if (override) {
+        category = override;
+      } else if (salaryThresholdSnapshots && tx.id in salaryThresholdSnapshots) {
+        // This transaction already had its salary-or-not decision frozen
+        // on a previous visit — reuse that instead of re-checking against
+        // (possibly since-changed) salaryMinAmount, then fall through to
+        // the normal keyword rules if the snapshot says "not salary".
+        category = salaryThresholdSnapshots[tx.id] ? 'Salary' : autoCategory(tx.description, tx.amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount, true);
+      } else {
+        category = autoCategory(tx.description, tx.amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount);
+      }
       return Object.assign({}, tx, {
-        category: override || autoCategory(tx.description, tx.amount, merchantRules, disabledCategories, effectiveRules, salaryMinAmount),
+        category: category,
         isOverride: Boolean(override),
         // The real bank date is untouched — this only changes which month
         // a transaction is grouped into for totals and charts, e.g. a
@@ -2264,7 +2352,7 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
         hasMonthOverride: Boolean(monthOverride),
       });
     });
-  }, [transactions, overrides, merchantRules, monthOverrides, disabledCategories, effectiveRules, salaryMinAmount]);
+  }, [transactions, overrides, merchantRules, monthOverrides, disabledCategories, effectiveRules, salaryMinAmount, salaryThresholdSnapshots]);
 
   // A second pass, separate from the per-transaction logic above, since this
   // rule needs to see every transaction in a month before it can decide any
@@ -2690,7 +2778,7 @@ function SpendingPaceChart(props) {
 }
 
 function OverviewScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount, props.salaryThresholdSnapshots, props.onSalarySnapshotsChange);
   // Lifted up to App (see there for why) so the selected month survives
   // switching to another tab and back.
   var selectedMonth = props.ovSelectedMonth, setSelectedMonth = props.onOvSelectedMonthChange;
@@ -3223,7 +3311,7 @@ function OverviewScreen(props) {
 // --- Trends screen ------------------------------------------------------
 
 function TrendsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount, props.salaryThresholdSnapshots, props.onSalarySnapshotsChange);
   var trendCategoryState = useState(null);
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
@@ -3358,7 +3446,7 @@ function TrendsScreen(props) {
 // --- Transactions screen ------------------------------------------------------
 
 function TransactionsScreen(props) {
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount, props.salaryThresholdSnapshots, props.onSalarySnapshotsChange);
   // Filter state is lifted up to App (see there for why) — these read/write
   // through props rather than their own useState, so the filters survive
   // switching to another tab and back.
@@ -4150,11 +4238,23 @@ function MerchantRulesSection(props) {
 
   // The editable rule entry for the active filter category, if it has one
   // (entries without a `keywords` array — the 4 structural-pattern rules —
-  // have no editable keyword list at all, only a fixed regex).
+  // have no editable keyword list at all, only a fixed regex). Falls back
+  // to a synthetic empty entry when the category has no keywords yet at
+  // all (a custom category that's never had a single keyword added) —
+  // without this, the "add a keyword" UI would never appear for a category
+  // until it already had at least one keyword, which is backwards.
   var editableRule = useMemo(function () {
     if (!props.filterCategory) return null;
     var effectiveRules = buildEffectiveRules(props.keywordOverrides);
-    return effectiveRules.find(function (r) { return r.category === props.filterCategory && r.keywords; }) || null;
+    var found = effectiveRules.find(function (r) { return r.category === props.filterCategory && r.keywords; });
+    if (found) return found;
+    // Not Salary, not a Housing-rule category, not a structural-pattern
+    // rule — and not yet present in effectiveRules because it has zero
+    // keywords so far. Anything else is fair game to start a fresh
+    // keyword list for.
+    var isStructural = BASE_RULES.some(function (r) { return r.category === props.filterCategory && !r.keywords; });
+    if (props.filterCategory === 'Salary' || ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1 || isStructural) return null;
+    return { category: props.filterCategory, keywords: [] };
   }, [props.filterCategory, props.keywordOverrides]);
 
   // Whether this category's matching logic is one of the two mechanisms
@@ -4426,7 +4526,7 @@ function HousingRuleSettings(props) {
 
 function SettingsScreen(props) {
   var restoreInputRef = useRef(null);
-  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount);
+  var data = useLedgerData(props.transactions, props.overrides, props.merchantRules, props.monthOverrides, props.housingRule, props.disabledCategories, props.categoryRenames, props.keywordOverrides, props.salaryMinAmount, props.salaryThresholdSnapshots, props.onSalarySnapshotsChange);
 
   // Which category's rules to show in "Automatic categorization rules"
   // below — tapping a category row in "Categories" sets this, filtering
@@ -4602,6 +4702,15 @@ function App() {
   var keywordOverrides = keywordOverridesState[0], setKeywordOverrides = keywordOverridesState[1];
   var salaryMinAmountState = useState(function () { return loadSalaryMinAmount(); });
   var salaryMinAmount = salaryMinAmountState[0], setSalaryMinAmount = salaryMinAmountState[1];
+  var salaryThresholdSnapshotsState = useState(function () { return loadSalaryThresholdSnapshots(); });
+  var salaryThresholdSnapshots = salaryThresholdSnapshotsState[0], setSalaryThresholdSnapshots = salaryThresholdSnapshotsState[1];
+  var handleSalarySnapshotsChange = useCallback(function (newEntries) {
+    setSalaryThresholdSnapshots(function (prev) {
+      var next = Object.assign({}, prev, newEntries);
+      saveSalaryThresholdSnapshots(next);
+      return next;
+    });
+  }, []);
 
   // Lifted up from TransactionsScreen so the person's filter choices survive
   // switching to another tab and back — a screen component fully unmounts
@@ -5145,6 +5254,15 @@ function App() {
       notes: loadNotes(),
       merchantRules: loadMerchantRules(),
       monthOverrides: loadMonthOverrides(),
+      disabledCategories: loadDisabledCategories(),
+      categoryRenames: loadCategoryRenames(),
+      keywordOverrides: loadKeywordOverrides(),
+      salaryMinAmount: loadSalaryMinAmount(),
+      // Restoring this is what makes the "restore shouldn't reclassify
+      // anything" guarantee hold — without it, every transaction would
+      // look brand-new after a restore and re-decide its salary status
+      // against whatever salaryMinAmount happens to be at restore time.
+      salaryThresholdSnapshots: loadSalaryThresholdSnapshots(),
       exportedAt: new Date().toISOString(),
     });
   }, []);
@@ -5162,12 +5280,26 @@ function App() {
         saveNotes(data.notes || {});
         saveMerchantRules(data.merchantRules || {});
         saveMonthOverrides(data.monthOverrides || {});
+        saveDisabledCategories(data.disabledCategories || []);
+        saveCategoryRenames(data.categoryRenames || {});
+        saveKeywordOverrides(data.keywordOverrides || {});
+        saveSalaryMinAmount(typeof data.salaryMinAmount === 'number' ? data.salaryMinAmount : SALARY_MIN_AMOUNT);
+        // Older backups (saved before this field existed) won't have it —
+        // defaulting to {} is safe: it just means every transaction will be
+        // re-decided against the restored salaryMinAmount once, same as
+        // any transaction the app has genuinely never seen before.
+        saveSalaryThresholdSnapshots(data.salaryThresholdSnapshots || {});
         setTransactions(Object.values(data.transactions));
         setOverrides(data.overrides || {});
         setCustomCategories(data.customCategories || []);
         setNotes(data.notes || {});
         setMerchantRules(data.merchantRules || {});
         setMonthOverrides(data.monthOverrides || {});
+        setDisabledCategories(data.disabledCategories || []);
+        setCategoryRenames(data.categoryRenames || {});
+        setKeywordOverrides(data.keywordOverrides || {});
+        setSalaryMinAmount(typeof data.salaryMinAmount === 'number' ? data.salaryMinAmount : SALARY_MIN_AMOUNT);
+        setSalaryThresholdSnapshots(data.salaryThresholdSnapshots || {});
         setStatus('Backup restored.');
       } catch (err) {
         setError('Could not restore that file: ' + err.message);
@@ -5193,11 +5325,12 @@ function App() {
     onDeleteMerchantRule: handleDeleteMerchantRule, customCategories: customCategories,
     keywordOverrides: keywordOverrides, onAddKeyword: handleAddKeyword, onRemoveKeyword: handleRemoveKeyword,
     salaryMinAmount: salaryMinAmount, onSalaryMinAmountChange: handleSalaryMinAmountChange,
+    salaryThresholdSnapshots: salaryThresholdSnapshots, onSalarySnapshotsChange: handleSalarySnapshotsChange,
   };
 
   // Computed once here (not per-screen) so every screen shows the same
   // up-to-date/stale state without each duplicating the same grouping logic.
-  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount).months;
+  var monthsForStaleCheck = useLedgerData(transactions, overrides, merchantRules, monthOverrides, housingRule, disabledCategories, categoryRenames, keywordOverrides, salaryMinAmount, salaryThresholdSnapshots, handleSalarySnapshotsChange).months;
   var isStale = isDataStale(monthsForStaleCheck);
 
   var screenEl;
