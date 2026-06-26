@@ -232,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.12';
+var APP_VERSION = '1.27.13';
 
 var CHANGELOG = [
+  { version: '1.27.13', notes: [
+    'Corrigido um problema importante: renomear uma categoria (especialmente uma especial como Rent, Salary, ou Investments) podia quebrar o sistema de formas subtis — a proteção contra apagar deixava de funcionar para a categoria renomeada, os cálculos financeiros podiam ficar incorretos, e editar palavras-chave ou o limiar do salário deixava de funcionar para a categoria renomeada.',
+    'Agora a renomeação é puramente visual em toda a app: o nome real interno nunca muda (toda a lógica financeira, proteções, e regras continuam a funcionar exatamente da mesma forma), só o texto mostrado é traduzido — incluindo a ordenação alfabética de categorias, que passa a ordenar pelo nome mostrado.',
+  ]},
   { version: '1.27.12', notes: [
     'No Resumo, a lista de transações pode agora ordenar por "Date" (mais recente primeiro, como já era) ou "Price" (maior valor absoluto primeiro, para encontrar rapidamente as maiores despesas ou recebimentos do mês) — o controlo aparece junto ao título "Transactions (N)"',
   ]},
@@ -598,7 +602,7 @@ var FAQ_ITEMS = [
   { q: 'Como sei até que data tenho dados importados?',
     a: 'Em Definições, logo abaixo do botão de importar, "Data up to: ..." mostra a data da transação mais recente que tens guardada — é a forma mais direta de saber até quando os teus dados estão atualizados. "Last upload: ..." mostra quando importaste um ficheiro pela última vez (mesmo que esse upload não tenha trazido transações novas), o que é útil para saberes se já é altura de exportar e importar o extrato mais recente.' },
   { q: 'Como apago ou renomeio uma categoria?',
-    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato. "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary, Investments, Rent, Credit Card Payment e Utilities não podem ser apagadas, porque têm lógica própria noutras partes da app que continua a existir mesmo que a categoria "desaparecesse" — mas podem ser renomeadas livremente.' },
+    a: 'Em Definições → "Categories", vês todas as categorias com o número de transações em cada uma, e também quantas regras automáticas a usam — regras criadas por "Apply to all" e, quando existem, regras incorporadas no código da app (mostradas com cor diferente, já que apagar a categoria não remove essas regras, só impede esse nome de aparecer; a transação cai na próxima regra que corresponder, ou em "Other"). Toca no nome ou na contagem de uma categoria para ver exatamente essas regras na secção "Automatic categorization rules" mais abaixo, incluindo as palavras-chave reais das regras incorporadas. Toca outra vez para limpar o filtro. "Rename" muda o nome em todas as transações já guardadas, de imediato — é uma mudança puramente visual, o que a categoria realmente representa internamente nunca muda, por isso renomear Rent, Salary, Investments, etc. nunca afeta a lógica própria dessas categorias (a Housing transfer rule, a deteção de salário, etc. continuam a funcionar exatamente da mesma forma). "Delete" pede confirmação e move todas as transações dessa categoria para "Other" — não é possível recuperar essa associação automaticamente depois, mesmo que voltes a criar uma categoria com o mesmo nome. Other, Salary, Investments, Rent, Credit Card Payment e Utilities não podem ser apagadas, porque têm lógica própria noutras partes da app que continua a existir mesmo que a categoria "desaparecesse" — mas podem ser renomeadas livremente.' },
   { q: 'Como apago uma regra automática de comerciante?',
     a: 'Em Definições → "Automatic categorization rules", vês todas as regras criadas a partir de categorizações em massa anteriores (comerciante → categoria). Apagar uma regra só afeta transações futuras desse comerciante — as que já foram categorizadas mantêm a categoria atual.' },
   { q: 'Quando altero uma regra (palavras-chave, limiar do salário, etc.), isso afeta transações antigas ou só as novas?',
@@ -1427,7 +1431,7 @@ function TransactionRow(props) {
         note ? h('span', { style: { color: 'var(--accent)', marginLeft: 5 } }, '\ud83d\udcdd') : null,
         tx.hasMonthOverride ? h('span', { style: { color: 'var(--accent2)', marginLeft: 5 } }, '\u2192 ' + monthLabel(tx.effectiveMonthKey)) : null,
         h('span', { style: { display: 'block', fontSize: 10, color: tx.isOverride ? 'var(--accent)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' } },
-          tx.category + (tx.isOverride ? ' \u00b7  edited' : ''))
+          tx.displayCategory + (tx.isOverride ? ' \u00b7  edited' : ''))
       ),
       h('span', { style: { fontFamily: "'IBM Plex Mono', monospace", textAlign: 'right', color: isPositive ? 'var(--gain)' : 'var(--loss)' } },
         isPositive ? '+' : '', h(Money, { amount: tx.amount }))
@@ -1444,8 +1448,8 @@ function TransactionRow(props) {
           style: {
             fontSize: 11, padding: '5px 10px', borderRadius: 10,
             border: '1px solid var(--border)',
-            background: c === tx.category ? 'var(--text)' : 'var(--surface)',
-            color: c === tx.category ? 'var(--bg)' : 'var(--text)',
+            background: c === tx.displayCategory ? 'var(--text)' : 'var(--surface)',
+            color: c === tx.displayCategory ? 'var(--bg)' : 'var(--text)',
             cursor: 'pointer',
           },
         }, c);
@@ -2355,15 +2359,23 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
 
   // A fourth and final pass — renames are a pure display translation, never
   // changing what's actually stored (an override, a merchant rule, etc.
-  // still says the OLD name underneath). Running this last means a rename
-  // takes effect immediately for every transaction already carrying the old
-  // name, including ones produced by any of the steps above.
+  // still says the OLD name underneath) OR what any financial calculation
+  // compares against. `tx.category` stays the real, permanent internal
+  // name everywhere — Salary, Investments, Rent, Income / Transfers In,
+  // etc. are recognized by every piece of logic in this file by that
+  // exact string, regardless of what the person has renamed them to. This
+  // pass adds `tx.displayCategory` (always present, even when unchanged)
+  // specifically for UI code to render instead of `tx.category` — list
+  // rows, pickers, chart labels, anywhere the category name reaches a
+  // person's eyes. Comparisons, filtering, summing, and protection checks
+  // must keep reading `tx.category`.
   var categorized = useMemo(function () {
-    if (!categoryRenames || Object.keys(categoryRenames).length === 0) return disabledApplied;
+    if (!categoryRenames || Object.keys(categoryRenames).length === 0) {
+      return disabledApplied.map(function (tx) { return Object.assign({}, tx, { displayCategory: tx.category }); });
+    }
     return disabledApplied.map(function (tx) {
       var renamed = categoryRenames[tx.category];
-      if (!renamed) return tx;
-      return Object.assign({}, tx, { category: renamed });
+      return Object.assign({}, tx, { displayCategory: renamed || tx.category });
     });
   }, [disabledApplied, categoryRenames]);
 
@@ -2428,8 +2440,8 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
   // spending categories when the person wants to track them over time too.
   var allCategoriesSeenBroad = useMemo(function () {
     var set = {};
-    categorized.forEach(function (tx) { set[tx.category] = true; });
-    return Object.keys(set).sort();
+    categorized.forEach(function (tx) { set[tx.displayCategory] = true; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
   }, [categorized]);
 
   return {
@@ -2999,8 +3011,8 @@ function OverviewScreen(props) {
   var spendingByCategory = useMemo(function () {
     var totals = {};
     monthTx.forEach(function (tx) {
-      if (isSpending(tx)) totals[tx.category] = (totals[tx.category] || 0) + Math.abs(tx.amount);
-      else if (isReimbursement(tx)) totals[tx.category] = (totals[tx.category] || 0) - tx.amount;
+      if (isSpending(tx)) totals[tx.displayCategory] = (totals[tx.displayCategory] || 0) + Math.abs(tx.amount);
+      else if (isReimbursement(tx)) totals[tx.displayCategory] = (totals[tx.displayCategory] || 0) - tx.amount;
     });
     // A category can end up at or below zero once reimbursements are netted
     // in (e.g. the only spending in "Trips & Holidays" this month was fully
@@ -3095,12 +3107,12 @@ function OverviewScreen(props) {
     else if (summaryFilter === 'invested') base = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount < 0; });
     else if (summaryFilter === 'investmentWithdrawals') base = monthTx.filter(function (tx) { return tx.category === 'Investments' && tx.amount > 0; });
     else if (summaryFilter === 'credits') base = monthTx.filter(function (tx) { return tx.amount > 0; });
-    else if (categoryFilter) base = monthTx.filter(function (tx) { return tx.category === categoryFilter; });
+    else if (categoryFilter) base = monthTx.filter(function (tx) { return tx.displayCategory === categoryFilter; });
     else base = monthTx;
 
     var q = searchText.trim().toLowerCase();
     var filtered = !q ? base : base.filter(function (tx) {
-      var haystack = (tx.description + ' ' + tx.category + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
+      var haystack = (tx.description + ' ' + tx.displayCategory + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
       return haystack.indexOf(q) !== -1;
     });
 
@@ -3502,6 +3514,19 @@ function TrendsScreen(props) {
 
   var activeTrendCategory = trendCategory || data.allCategoriesSeenBroad[0];
 
+  // Local inverse-rename resolver, same reasoning as App's
+  // displayToRealCategory/resolveRealCategory — activeTrendCategory is a
+  // DISPLAY name (it comes from allCategoriesSeenBroad, which is now
+  // display-translated), but NON_REIMBURSABLE_CATEGORIES is a list of
+  // REAL names, so checking "is this category Salary/Investments/etc." has
+  // to compare against the real name, not whatever it's been renamed to.
+  var activeTrendCategoryReal = useMemo(function () {
+    var renames = props.categoryRenames || {};
+    var inverse = {};
+    Object.keys(renames).forEach(function (realName) { inverse[renames[realName]] = realName; });
+    return inverse[activeTrendCategory] || activeTrendCategory;
+  }, [activeTrendCategory, props.categoryRenames]);
+
   var categoryTrend = useMemo(function () {
     if (!activeTrendCategory) return [];
     // Salary, Investments, and the three transfer-mechanism categories
@@ -3516,13 +3541,13 @@ function TrendsScreen(props) {
     // of these categories would fall through every branch below and never
     // get summed at all, showing as a flat 0 on the trend chart regardless
     // of how much money actually moved.
-    var isSpecialCategory = NON_REIMBURSABLE_CATEGORIES.indexOf(activeTrendCategory) !== -1;
+    var isSpecialCategory = NON_REIMBURSABLE_CATEGORIES.indexOf(activeTrendCategoryReal) !== -1;
     // A single pass over every transaction, bucketed by month, rather than
     // re-scanning the full transaction list once per month — the previous
     // version was O(months × transactions); this is O(transactions).
     var sumsByMonth = {};
     data.categorized.forEach(function (tx) {
-      if (tx.category !== activeTrendCategory) return;
+      if (tx.displayCategory !== activeTrendCategory) return;
       var mk = tx.effectiveMonthKey;
       if (sumsByMonth[mk] === undefined) sumsByMonth[mk] = 0;
       if (isSpecialCategory) sumsByMonth[mk] += Math.abs(tx.amount);
@@ -3538,7 +3563,7 @@ function TrendsScreen(props) {
         return { x: shortMonthLabel(mk), y: Math.max(0, sumsByMonth[mk] || 0) };
       }),
     }];
-  }, [data.monthsAscending, data.categorized, activeTrendCategory]);
+  }, [data.monthsAscending, data.categorized, activeTrendCategory, activeTrendCategoryReal]);
 
   if (props.transactions.length === 0) {
     return h(EmptyState, { onFile: props.onAddFile, error: props.error });
@@ -3630,10 +3655,10 @@ function TransactionsScreen(props) {
     var q = searchText.trim().toLowerCase();
     return data.categorized
       .filter(function (tx) {
-        if (filterCategory && tx.category !== filterCategory) return false;
+        if (filterCategory && tx.displayCategory !== filterCategory) return false;
         if (monthFilter.length > 0 && monthFilter.indexOf(tx.effectiveMonthKey) === -1) return false;
         if (q) {
-          var haystack = (tx.description + ' ' + tx.category + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
+          var haystack = (tx.description + ' ' + tx.displayCategory + ' ' + (props.notes && props.notes[tx.id] ? props.notes[tx.id] : '')).toLowerCase();
           if (haystack.indexOf(q) === -1) return false;
         }
         return true;
@@ -3643,8 +3668,8 @@ function TransactionsScreen(props) {
 
   var allCategories = useMemo(function () {
     var set = {};
-    data.categorized.forEach(function (tx) { set[tx.category] = true; });
-    return Object.keys(set).sort();
+    data.categorized.forEach(function (tx) { set[tx.displayCategory] = true; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
   }, [data.categorized]);
 
   var hasAnyFilter = Boolean(filterCategory) || monthFilter.length > 0 || searchText.trim().length > 0;
@@ -4220,6 +4245,16 @@ function CategoryManagementSection(props) {
   var sortedCategories = useMemo(function () {
     return props.categories.slice().sort(function (a, b) { return a.localeCompare(b); });
   }, [props.categories]);
+  // props.categories arrives display-translated (allCategoriesCombined
+  // already applies renames), but PROTECTED_CATEGORIES is a list of REAL
+  // names — this resolves a display name back to its real name so a
+  // renamed Rent/Salary/etc. is still correctly recognized as protected.
+  var displayToReal = useMemo(function () {
+    var renames = props.categoryRenames || {};
+    var inverse = {};
+    Object.keys(renames).forEach(function (realName) { inverse[renames[realName]] = realName; });
+    return inverse;
+  }, [props.categoryRenames]);
   var deletingState = useState(null); // category name | null
   var deleting = deletingState[0], setDeleting = deletingState[1];
   var renamingState = useState(null); // category name | null
@@ -4289,10 +4324,11 @@ function CategoryManagementSection(props) {
   return h('div', null,
     h('div', { className: 'card', style: { marginBottom: 20, padding: 0, overflow: 'hidden' } },
       sortedCategories.map(function (category, i) {
+        var realCategory = displayToReal[category] || category;
         var count = props.counts[category] || 0;
-        var isProtected = PROTECTED_CATEGORIES.indexOf(category) !== -1;
-        var hardcodedCount = hardcodedRuleCounts[category] || 0;
-        var merchantCount = merchantRuleCounts[category] || 0;
+        var isProtected = PROTECTED_CATEGORIES.indexOf(realCategory) !== -1;
+        var hardcodedCount = hardcodedRuleCounts[realCategory] || 0;
+        var merchantCount = merchantRuleCounts[realCategory] || 0;
         var isActiveFilter = props.filterCategory === category;
         return h('div', {
           key: category,
@@ -4387,12 +4423,25 @@ function extractRulePattern(testFn) {
 }
 
 function MerchantRulesSection(props) {
+  // props.filterCategory arrives as a DISPLAY name (it's set from a tap on
+  // a row in CategoryManagementSection, which shows display-translated
+  // names) — resolve it back to the real name for every comparison below
+  // against rules/BASE_RULES/Salary/Rent etc., which all key by real name.
+  // props.filterCategory itself is kept as-is for anything that displays
+  // it as text (e.g. the "Showing rules for X" banner).
+  var filterCategoryReal = useMemo(function () {
+    var renames = props.categoryRenames || {};
+    var inverse = {};
+    Object.keys(renames).forEach(function (realName) { inverse[renames[realName]] = realName; });
+    return inverse[props.filterCategory] || props.filterCategory;
+  }, [props.filterCategory, props.categoryRenames]);
+
   var rules = props.merchantRules || {};
   var fragments = useMemo(function () {
     var all = Object.keys(rules).sort(function (a, b) { return a.localeCompare(b); });
-    if (!props.filterCategory) return all;
-    return all.filter(function (f) { return rules[f] === props.filterCategory; });
-  }, [rules, props.filterCategory]);
+    if (!filterCategoryReal) return all;
+    return all.filter(function (f) { return rules[f] === filterCategoryReal; });
+  }, [rules, filterCategoryReal]);
 
   // The editable rule entry for the active filter category, if it has one
   // (entries without a `keywords` array — the 4 structural-pattern rules —
@@ -4402,36 +4451,36 @@ function MerchantRulesSection(props) {
   // without this, the "add a keyword" UI would never appear for a category
   // until it already had at least one keyword, which is backwards.
   var editableRule = useMemo(function () {
-    if (!props.filterCategory) return null;
+    if (!filterCategoryReal) return null;
     var effectiveRules = buildEffectiveRules(props.keywordOverrides);
-    var found = effectiveRules.find(function (r) { return r.category === props.filterCategory && r.keywords; });
+    var found = effectiveRules.find(function (r) { return r.category === filterCategoryReal && r.keywords; });
     if (found) return found;
     // Not Salary, not a Housing-rule category, not a structural-pattern
     // rule — and not yet present in effectiveRules because it has zero
     // keywords so far. Anything else is fair game to start a fresh
     // keyword list for.
-    var isStructural = BASE_RULES.some(function (r) { return r.category === props.filterCategory && !r.keywords; });
-    if (props.filterCategory === 'Salary' || ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1 || isStructural) return null;
-    return { category: props.filterCategory, keywords: [] };
-  }, [props.filterCategory, props.keywordOverrides]);
+    var isStructural = BASE_RULES.some(function (r) { return r.category === filterCategoryReal && !r.keywords; });
+    if (filterCategoryReal === 'Salary' || ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(filterCategoryReal) !== -1 || isStructural) return null;
+    return { category: filterCategoryReal, keywords: [] };
+  }, [filterCategoryReal, props.keywordOverrides]);
 
   // Whether this category's matching logic is one of the two mechanisms
   // that don't use a keyword list AT ALL (Salary's sender+amount check, or
   // the Housing transfer rule's per-month amount thresholds) — shown as a
   // plain-language description instead of editable keywords, since there's
   // nothing here to add/remove a literal word from.
-  var isSalaryFilter = props.filterCategory === 'Salary';
-  var isHousingRuleFilter = ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(props.filterCategory) !== -1;
+  var isSalaryFilter = filterCategoryReal === 'Salary';
+  var isHousingRuleFilter = ['Rent', 'Credit Card Payment', 'Utilities'].indexOf(filterCategoryReal) !== -1;
 
   // Structural built-in rules matching the filter — entries with no
   // `keywords` array at all (a fixed regex using a prefix anchor or
   // character class, not a flat OR of literal words). These are shown for
   // visibility but can't be edited from this screen.
   var structuralRules = useMemo(function () {
-    if (!props.filterCategory) return [];
-    return BASE_RULES.filter(function (r) { return r.category === props.filterCategory && !r.keywords; })
+    if (!filterCategoryReal) return [];
+    return BASE_RULES.filter(function (r) { return r.category === filterCategoryReal && !r.keywords; })
       .map(function (r) { return extractRulePattern(r.test); });
-  }, [props.filterCategory]);
+  }, [filterCategoryReal]);
 
   var newKeywordState = useState('');
   var newKeyword = newKeywordState[0], setNewKeyword = newKeywordState[1];
@@ -4439,8 +4488,8 @@ function MerchantRulesSection(props) {
   var salaryDraft = salaryDraftState[0], setSalaryDraft = salaryDraftState[1];
 
   function handleAddKeywordClick() {
-    if (!newKeyword.trim() || !props.filterCategory) return;
-    props.onAddKeyword(props.filterCategory, newKeyword);
+    if (!newKeyword.trim() || !filterCategoryReal) return;
+    props.onAddKeyword(filterCategoryReal, newKeyword);
     setNewKeyword('');
   }
 
@@ -4483,7 +4532,7 @@ function MerchantRulesSection(props) {
           },
             kw,
             h('button', {
-              onClick: function () { props.onRemoveKeyword(props.filterCategory, kw); },
+              onClick: function () { props.onRemoveKeyword(filterCategoryReal, kw); },
               style: { border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 },
               'aria-label': 'Remove ' + kw,
             }, '\u00d7')
@@ -4724,7 +4773,7 @@ function SettingsScreen(props) {
   // would show for that category right now.
   var categoryCounts = useMemo(function () {
     var counts = {};
-    data.categorized.forEach(function (tx) { counts[tx.category] = (counts[tx.category] || 0) + 1; });
+    data.categorized.forEach(function (tx) { counts[tx.displayCategory] = (counts[tx.displayCategory] || 0) + 1; });
     return counts;
   }, [data.categorized]);
 
@@ -4794,6 +4843,7 @@ function SettingsScreen(props) {
       onDelete: props.onDeleteCategory, onRename: props.onRenameCategory,
       housingRuleEnabled: Boolean(props.housingRule && props.housingRule.enabled),
       filterCategory: ruleFilterCategory, onFilterCategory: setRuleFilterCategory,
+      categoryRenames: props.categoryRenames,
     }),
 
     h('p', { className: 'section-title' }, 'Automatic categorization rules'),
@@ -4802,6 +4852,7 @@ function SettingsScreen(props) {
       filterCategory: ruleFilterCategory, onClearFilter: function () { setRuleFilterCategory(null); },
       keywordOverrides: props.keywordOverrides, onAddKeyword: props.onAddKeyword, onRemoveKeyword: props.onRemoveKeyword,
       salaryMinAmount: props.salaryMinAmount, onSalaryMinAmountChange: props.onSalaryMinAmountChange,
+      categoryRenames: props.categoryRenames,
     }),
 
     h(ScreenFooter)
@@ -5253,7 +5304,8 @@ function App() {
   // isn't the same as a person deliberately confirming "yes, categorize
   // this whole recurring merchant" — only the latter should create a
   // standing rule that silently affects every future import.
-  function applyCategoryToFragmentAndRemember(fragment, category) {
+  function applyCategoryToFragmentAndRemember(fragment, displayCategoryChosen) {
+    var category = resolveRealCategory(displayCategoryChosen);
     applyCategoryToFragment(fragment, category);
     setMerchantRules(function (prev) {
       var next = Object.assign({}, prev);
@@ -5276,19 +5328,21 @@ function App() {
   // specific rows themselves, so this applies directly with no merchant-
   // fragment inference and no standing rule, regardless of how many
   // different merchants are represented in the selection.
-  var handleApplyCategoryToSelection = useCallback(function (ids, category) {
+  var handleApplyCategoryToSelection = useCallback(function (ids, displayCategoryChosen) {
+    var category = resolveRealCategory(displayCategoryChosen);
     setOverrides(function (prev) {
       var next = Object.assign({}, prev);
       ids.forEach(function (id) { next[id] = category; });
       saveOverrides(next);
       return next;
     });
-  }, []);
+  }, [resolveRealCategory]);
 
   // Step 1: figure out what WOULD be affected, and only apply immediately if
   // it's just the one transaction being looked at. Anything wider needs the
   // person to see the list and confirm before it's actually applied.
-  var handleCategoryChange = useCallback(function (id, category) {
+  var handleCategoryChange = useCallback(function (id, displayCategoryChosen) {
+    var category = resolveRealCategory(displayCategoryChosen);
     var changedTx = transactions.find(function (t) { return t.id === id; });
     if (!changedTx) return;
 
@@ -5311,7 +5365,7 @@ function App() {
       return;
     }
     setPendingCategoryChange({ fragment: fragment, category: category, affected: affected, triggerId: id });
-  }, [transactions, housingRule]);
+  }, [transactions, housingRule, resolveRealCategory]);
 
   var handleConfirmCategoryChange = useCallback(function () {
     if (!pendingCategoryChange) return;
@@ -5354,6 +5408,28 @@ function App() {
     // each render spot.
     return combined.slice().sort(function (a, b) { return a.localeCompare(b); });
   }, [customCategories, housingRule, disabledCategories, categoryRenames]);
+
+  // The inverse of categoryRenames — display name -> real internal name.
+  // Every UI surface that lets a person CHOOSE a category (the inline
+  // per-transaction picker, both bulk pickers, Categorize merchants) shows
+  // and picks from allCategoriesCombined's DISPLAY names, but anything
+  // that gets stored (an override, a standing merchant rule) must store
+  // the REAL name — otherwise a manual choice of a renamed special
+  // category (e.g. picking "House Payment" after renaming Rent) would
+  // silently break every piece of financial logic that still checks for
+  // the literal string 'Rent'. Call resolveRealCategory() on any category
+  // value arriving from a person's UI choice before it's saved anywhere.
+  var displayToRealCategory = useMemo(function () {
+    var inverse = {};
+    Object.keys(categoryRenames).forEach(function (realName) {
+      inverse[categoryRenames[realName]] = realName;
+    });
+    return inverse;
+  }, [categoryRenames]);
+
+  var resolveRealCategory = useCallback(function (displayName) {
+    return displayToRealCategory[displayName] || displayName;
+  }, [displayToRealCategory]);
 
   var handleCreateCategory = useCallback(function (name) {
     var trimmed = name.trim();
