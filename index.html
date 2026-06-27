@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.14';
+var APP_VERSION = '1.27.15';
 
 var CHANGELOG = [
+  { version: '1.27.15', notes: [
+    'Corrigida a cor do estado intermédio na sinalética N/B/S da pontuação mensal — aparecia roxo (a cor de destaque usada noutros sítios da app) em vez de amarelo',
+  ]},
   { version: '1.27.14', notes: [
     'Quando o saldo da conta desce e o valor investido nesse mês cobre essa descida, o fator "Balance growth" da pontuação mensal é agora ignorado por completo, em vez de penalizar — mover dinheiro para investimentos é uma escolha, não um prejuízo. Só se aplica quando o saldo realmente desce; se o saldo continuar a subir (mesmo menos do que esperado), o fator nunca é ignorado.',
     'A pontuação mensal mostra agora 3 letras discretas (N/B/S) sempre visíveis junto ao número, mesmo com o detalhe fechado — verde, amarelo, ou vermelho conforme o estado de cada fator, e cinzento quando esse fator não conta esse mês (sem histórico suficiente, ou ignorado pela regra acima).',
@@ -3253,7 +3256,7 @@ function OverviewScreen(props) {
               ['netPositive', 'balanceGrowth', 'spendingVsAverage'].map(function (key) {
                 var letter = key === 'netPositive' ? 'N' : key === 'balanceGrowth' ? 'B' : 'S';
                 var factor = monthlyScore.factors.find(function (f) { return f.key === key; });
-                var color = !factor ? 'var(--muted)' : factor.score > 0.66 ? 'var(--gain)' : factor.score > 0.33 ? 'var(--accent2)' : 'var(--loss)';
+                var color = !factor ? 'var(--muted)' : factor.score > 0.66 ? 'var(--gain)' : factor.score > 0.33 ? 'var(--dividend)' : 'var(--loss)';
                 return h('span', {
                   key: key,
                   style: { fontSize: 8, fontWeight: 700, color: color, opacity: factor ? 1 : 0.5 },
