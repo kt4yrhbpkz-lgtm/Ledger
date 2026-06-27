@@ -105,7 +105,7 @@ button { font-family: var(--sans); }
 }
 .icon-btn:active { background: var(--surface2); }
 
-#main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 16px); }
+#main { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 16px); }
 .screen { padding: 20px 18px; max-width: 480px; margin: 0 auto; }
 
 .bottomnav {
@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.15';
+var APP_VERSION = '1.27.16';
 
 var CHANGELOG = [
+  { version: '1.27.16', notes: [
+    'Corrigido o ecrã do Resumo a deslizar para os lados ao tocar no gráfico de categorias (donut) — um toque ali podia ser interpretado, por breves instantes, como um gesto de mudar de mês, fazendo a página inteira saltar para o lado. Reforçado também o contentor principal contra qualquer overflow horizontal futuro.',
+  ]},
   { version: '1.27.15', notes: [
     'Corrigida a cor do estado intermédio na sinalética N/B/S da pontuação mensal — aparecia roxo (a cor de destaque usada noutros sítios da app) em vez de amarelo',
   ]},
@@ -2077,6 +2080,7 @@ function DonutChart(props) {
   return h('div', null,
     h('div', { style: { position: 'relative', display: 'flex', justifyContent: 'center', marginBottom: 24 } },
       h('svg', {
+        className: 'donut-chart-svg',
         viewBox: '0 0 ' + size + ' ' + size,
         style: { width: size, height: size, flexShrink: 0, filter: 'drop-shadow(0 6px 16px rgba(' + cssVar('--shadow-rgb') + ', 0.18))' },
       },
@@ -2952,6 +2956,18 @@ function OverviewScreen(props) {
       // this, the page-level gesture's preventDefault() (below) fights with
       // the strip's own horizontal scroll and makes it feel stuck.
       if (monthStripRef.current && monthStripRef.current.contains(e.target)) {
+        startX = null;
+        return;
+      }
+      // Same reasoning as the month-strip exclusion above — the donut
+      // chart's slices are individually tappable (to filter by category),
+      // so a touch starting there shouldn't be classified as a page swipe
+      // at all. A real-device report showed that even a touch meant as a
+      // tap on the donut could have enough incidental horizontal drift to
+      // briefly lock this gesture to 'horizontal' before preventDefault()
+      // started applying, and that brief window was enough to visibly
+      // shift the whole page sideways.
+      if (e.target.closest && e.target.closest('.donut-chart-svg')) {
         startX = null;
         return;
       }
