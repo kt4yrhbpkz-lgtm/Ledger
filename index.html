@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.18';
+var APP_VERSION = '1.27.19';
 
 var CHANGELOG = [
+  { version: '1.27.19', notes: [
+    'Encontrada e corrigida a causa real do ecrã do Resumo a deslizar para os lados: o gráfico "Spending pace vs. average" tem o seu próprio gesto de toque (para mostrar valores ao arrastar o dedo pela linha), que disparava ao mesmo tempo que o gesto de mudar de mês, sem que nenhum dos dois soubesse do outro. O gráfico passa agora a impedir corretamente que o seu toque seja também interpretado como uma tentativa de mudar de mês.',
+  ]},
   { version: '1.27.18', notes: [
     'Nova tentativa de corrigir o ecrã do Resumo a deslizar para os lados: a causa real era um intervalo de tempo (de cerca de 8 pixels de movimento) em que nada impedia o "bounce" nativo do iOS antes do código da app reagir. Esse intervalo foi eliminado — a app reage agora desde o primeiro instante de qualquer toque, em qualquer parte do ecrã, sem precisar de saber de antemão onde isso pode acontecer.',
   ]},
@@ -1703,6 +1706,7 @@ function LineChart(props) {
   function handleTouchMove(e) {
     var idx = nearestIndexForClientX(e.touches[0].clientX);
     if (idx !== null) setActiveIdx(idx);
+    e.stopPropagation();
   }
   function handleTouchEnd() {
     setActiveIdx(null);
@@ -1872,6 +1876,7 @@ function TimeSeriesBarChart(props) {
   function handleTouchMove(e) {
     var idx = nearestIndexForClientX(e.touches[0].clientX);
     if (idx !== null) setActiveIdx(idx);
+    e.stopPropagation();
   }
   function handleTouchEnd() {
     setActiveIdx(null);
