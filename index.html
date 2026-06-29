@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.19';
+var APP_VERSION = '1.27.20';
 
 var CHANGELOG = [
+  { version: '1.27.20', notes: [
+    'Encontrada e corrigida a causa real do ecrã do Resumo a deslizar para os lados: depois de selecionar uma categoria no gráfico de despesas, a animação de entrada das fatias estava a reiniciar a cada toque (mesmo sem mudar nada visualmente) — isto, combinado com scroll vertical normal, confundia o motor de renderização do iOS Safari. A animação corre agora só uma vez, na primeira vez que o gráfico aparece.',
+  ]},
   { version: '1.27.19', notes: [
     'Encontrada e corrigida a causa real do ecrã do Resumo a deslizar para os lados: o gráfico "Spending pace vs. average" tem o seu próprio gesto de toque (para mostrar valores ao arrastar o dedo pela linha), que disparava ao mesmo tempo que o gesto de mudar de mês, sem que nenhum dos dois soubesse do outro. O gráfico passa agora a impedir corretamente que o seu toque seja também interpretado como uma tentativa de mudar de mês.',
   ]},
@@ -2051,6 +2054,23 @@ function DonutChart(props) {
   var cx = size / 2, cy = size / 2;
   var gapDeg = data.length > 1 ? 2.5 : 0; // small visual gap between slices
 
+  // The "grow in" entrance animation (donutGrow, applied per-slice below)
+  // should only ever play once, the first time this chart appears — not
+  // restart every time a slice is tapped. Each render previously created a
+  // brand-new `style.animation` string even when nothing about the
+  // slice's shape changed (only its opacity, via the isDimmed flag below),
+  // which restarted the CSS animation on every tap. A real-device report
+  // confirmed the page visibly shifting sideways specifically while
+  // scrolling AFTER a slice was selected — animation + transform + filter
+  // on SVG elements is a known trouble spot in iOS Safari's rendering
+  // during scroll, so removing the repeated restarts removes the
+  // suspected trigger. isFirstRenderRef.current starts true and is set to
+  // false right after the first render, with no state update (and
+  // therefore no extra render) involved.
+  var isFirstRenderRef = useRef(true);
+  var playEntranceAnimation = isFirstRenderRef.current;
+  isFirstRenderRef.current = false;
+
   var total = data.reduce(function (sum, d) { return sum + d.amount; }, 0);
   var angle = -Math.PI / 2; // start at top
   var gapRad = (gapDeg * Math.PI) / 180;
@@ -2096,15 +2116,18 @@ function DonutChart(props) {
       },
         slices.map(function (s, i) {
           var isDimmed = activeCategory && s.category !== activeCategory;
+          var pathStyle = {
+            cursor: onCategoryClick ? 'pointer' : 'default',
+            transition: 'opacity 0.15s, transform 0.2s',
+            transformOrigin: cx + 'px ' + cy + 'px',
+          };
+          if (playEntranceAnimation) {
+            pathStyle.animation = 'donutGrow 0.5s ease-out ' + (i * 0.05) + 's backwards';
+          }
           return h('path', {
             key: i, d: s.path, fill: s.color,
             opacity: isDimmed ? 0.3 : 1,
-            style: {
-              cursor: onCategoryClick ? 'pointer' : 'default',
-              transition: 'opacity 0.15s, transform 0.2s',
-              transformOrigin: cx + 'px ' + cy + 'px',
-              animation: 'donutGrow 0.5s ease-out ' + (i * 0.05) + 's backwards',
-            },
+            style: pathStyle,
             onClick: function () { handleClick(s.category); },
           });
         }),
