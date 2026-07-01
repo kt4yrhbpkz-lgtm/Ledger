@@ -232,9 +232,15 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.20';
+var APP_VERSION = '1.27.22';
 
 var CHANGELOG = [
+  { version: '1.27.22', notes: [
+    'Adicionada uma rede de segurança definitiva contra o ecrã a deslizar para os lados: o ecrã principal corrige-se automaticamente para a posição correta sempre que se desviar horizontalmente, seja qual for a causa — em vez de depender só de identificar e corrigir cada gesto específico que possa causar isto.',
+  ]},
+  { version: '1.27.21', notes: [
+    'Encontrada e corrigida (desta vez confirmada com precisão) a causa real do ecrã do Resumo a deslizar para os lados: tocar num botão como "Clear" perto do momento de arrastar para mudar de mês fazia os dois gestos entrarem em conflito. Qualquer toque que comece num botão (Clear, Credits, Select, uma categoria da lista, etc.) deixa agora de ser tratado como parte do gesto de mudar de mês.',
+  ]},
   { version: '1.27.20', notes: [
     'Encontrada e corrigida a causa real do ecrã do Resumo a deslizar para os lados: depois de selecionar uma categoria no gráfico de despesas, a animação de entrada das fatias estava a reiniciar a cada toque (mesmo sem mudar nada visualmente) — isto, combinado com scroll vertical normal, confundia o motor de renderização do iOS Safari. A animação corre agora só uma vez, na primeira vez que o gráfico aparece.',
   ]},
@@ -3000,6 +3006,20 @@ function OverviewScreen(props) {
         startX = null;
         return;
       }
+      // A touch starting on ANY interactive element (a button like
+      // "Clear"/"Credits"/"Select", a category row, a link) should never
+      // be tracked as a page swipe at all — a real-device report showed
+      // the page visibly shifting sideways specifically when a tap on
+      // "Clear" landed close in time to a month-change swipe gesture, even
+      // though the touch was clearly meant as a simple tap on a button.
+      // Generalizing this exclusion (rather than listing specific buttons
+      // one at a time, the way the month-strip exclusion above works)
+      // protects every current and future interactive element on this
+      // screen from the same conflict.
+      if (e.target.closest && e.target.closest('button, a, input, [role="button"]')) {
+        startX = null;
+        return;
+      }
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
     }
@@ -5082,6 +5102,27 @@ function App() {
     el.addEventListener('scroll', onScroll, { passive: true });
     return function () { el.removeEventListener('scroll', onScroll); };
   }, [screen]);
+
+  // Final unconditional safety net: #main should NEVER have any horizontal
+  // scroll position other than 0. Every other fix elsewhere in this file
+  // for "the screen shifts sideways" targets a SPECIFIC confirmed gesture
+  // conflict (the donut chart's entrance animation restarting on tap, a
+  // button tap landing at the same moment as the month-swipe gesture,
+  // etc.) — each was found and fixed only after a real-device video showed
+  // that exact sequence, and there's no way to be certain every possible
+  // path to the same symptom has been found this way. This watchdog
+  // doesn't try to figure out why #main drifted sideways; it just snaps it
+  // straight back the instant it happens, on every scroll event, so even
+  // an as-yet-unidentified cause can't leave the page visibly shifted.
+  useEffect(function () {
+    var el = mainRef.current;
+    if (!el) return;
+    function snapBackHorizontal() {
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    }
+    el.addEventListener('scroll', snapBackHorizontal, { passive: true });
+    return function () { el.removeEventListener('scroll', snapBackHorizontal); };
+  }, []);
 
   useEffect(function () { setShowScrollTop(false); }, [screen]);
 
