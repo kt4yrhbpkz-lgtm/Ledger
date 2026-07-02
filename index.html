@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.0';
+var APP_VERSION = '1.28.1';
 
 var CHANGELOG = [
+  { version: '1.28.1', notes: [
+    'Corrigido o crash "mk.split" ao abrir a app num contexto sem dados (ex: a app instalada no ecrã inicial, que no iOS tem armazenamento separado do Safari): a app mostrava o ecrã de erro em vez do ecrã de upload. Agora arranca corretamente em qualquer contexto, com ou sem dados. Adicionado um teste de arranque completo da app (com e sem dados) que faltava na suite.',
+  ]},
   { version: '1.28.0', notes: [
     'Auditoria de código: gravações protegidas contra armazenamento cheio (antes, ao atingir o limite de ~5MB do Safari, as alterações perdiam-se silenciosamente — agora aparece um aviso claro a pedir backup).',
     'O backup passa a incluir a Housing transfer rule — restaurar num dispositivo novo já não a perde silenciosamente.',
@@ -2584,6 +2587,7 @@ function useLedgerData(transactions, overrides, merchantRules, monthOverrides, h
 }
 
 function shortMonthLabel(key) {
+  if (!key) return '';
   var parts = key.split('-').map(Number);
   var d = new Date(parts[0], parts[1] - 1, 1);
   var month = d.toLocaleDateString('en-GB', { month: 'short' });
@@ -2612,6 +2616,7 @@ function limitToTrailing13Months(monthsAscendingArr) {
 // 'YYYY-MM' -> 'YYYY-MM' for the calendar month immediately before it,
 // correctly rolling over the year boundary (e.g. 2026-01 -> 2025-12).
 function previousMonthKey(mk) {
+  if (!mk) return null;
   var parts = mk.split('-').map(Number);
   var y = parts[0], m = parts[1] - 1;
   if (m < 1) { m = 12; y -= 1; }
@@ -2620,6 +2625,7 @@ function previousMonthKey(mk) {
 
 // 'YYYY-MM' -> the same month one calendar year earlier.
 function sameMonthLastYearKey(mk) {
+  if (!mk) return null;
   var parts = mk.split('-').map(Number);
   return (parts[0] - 1) + '-' + String(parts[1]).padStart(2, '0');
 }
@@ -2883,6 +2889,7 @@ function cumulativeSpendingCurve(categorized, mk) {
 // through 100%, since the whole month already happened. Returns null when
 // there's no prior month to compare against at all.
 function spendingPaceComparison(categorized, mk, today) {
+  if (!mk) return null;
   var todayMonthKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
   var isCurrentRealMonth = mk === todayMonthKey;
   var totalDays = daysInMonth(mk);
