@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.25';
+var APP_VERSION = '1.27.26';
 
 var CHANGELOG = [
+  { version: '1.27.26', notes: [
+    'Os gráficos de Trends passam a mostrar por defeito só os últimos 13 meses (o ano anterior mais o mês atual), para que possas comparar cada mês com o seu homólogo do ano passado (ex: Natal com Natal). Cada gráfico tem o seu próprio botão "1Y / All" junto ao título, para expandires ao histórico completo quando quiseres. Isto evita que os gráficos fiquem ilegíveis à medida que acumulas anos de dados.',
+  ]},
   { version: '1.27.25', notes: [
     'Simplificação: removida a rede de segurança genérica que corrigia qualquer desvio de scroll horizontal, já que a causa real (o cabeçalho de "Transactions" a exceder a largura do ecrã) foi encontrada e corrigida diretamente. As correções de gestos que continuam válidas por si só (bloqueio de direção do gesto, botões a nunca disparar o gesto de mudar de mês) mantêm-se.',
   ]},
@@ -602,6 +605,8 @@ var FAQ_ITEMS = [
     a: 'Tudo fica guardado localmente neste navegador, neste dispositivo (localStorage). Nada é enviado para nenhum servidor. Isto significa que limpar os dados do navegador, ou usar outro dispositivo, não mantém os teus dados — usa o botão de backup nas Definições regularmente.' },
   { q: 'Como vejo o valor exato de um ponto num gráfico de linha?',
     a: 'Toca e arrasta o dedo sobre o gráfico, em Tendências. Aparece uma linha vertical e um balão com a data e o valor exato nesse ponto, que se atualiza enquanto arrastas.' },
+  { q: 'Porque é que os gráficos de Tendências só mostram os últimos meses?',
+    a: 'Por defeito, cada gráfico mostra os últimos 13 meses \u2014 o ano anterior mais o mês atual \u2014 para que possas comparar cada mês com o seu homólogo do ano passado (por exemplo, o Natal deste ano com o do ano passado). Isto também mantém os gráficos legíveis à medida que vais acumulando anos de dados. Cada gráfico tem um botão "1Y / All" junto ao título: toca em "All" para veres o histórico completo desse gráfico, e em "1Y" para voltares aos 13 meses. Cada gráfico é independente.' },
   { q: 'O que significam os filtros de Salário, Outros rendimentos e Investido/poupado no Resumo?',
     a: 'Tocar em qualquer um deles filtra a lista de transações abaixo para mostrar apenas esse tipo de movimento nesse mês \u2014 funcionam como os filtros do gráfico circular, mas para rendimentos e investimentos em vez de categorias de despesa. Tocar de novo remove o filtro.' },
   { q: 'Qual a diferença entre "Balance over time" e "Monthly net" em Tendências?',
@@ -2059,6 +2064,30 @@ function ChartLegend(props) {
   );
 }
 
+// A small "12mo / All" toggle placed next to a trend chart's title —
+// defaults to the trailing 12 months, since a chart showing years of
+// history at once becomes hard to read (data points too cramped, month
+// labels overlapping). Each chart gets its OWN instance of this (separate
+// range state per chart, not one shared switch), so someone can keep one
+// chart zoomed to the recent trend while viewing another's full history.
+function RangeToggle(props) {
+  return h('div', { style: { display: 'flex', gap: 4, background: 'var(--surface2)', borderRadius: 8, padding: 2, flexShrink: 0 } },
+    [['1y', '1Y'], ['all', 'All']].map(function (opt) {
+      var isActive = props.value === opt[0];
+      return h('button', {
+        key: opt[0],
+        onClick: function () { props.onChange(opt[0]); },
+        style: {
+          fontSize: 10, padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+          background: isActive ? 'var(--surface)' : 'transparent',
+          color: isActive ? 'var(--text)' : 'var(--muted)',
+          fontWeight: isActive ? 600 : 400,
+        },
+      }, opt[1]);
+    })
+  );
+}
+
 function DonutChart(props) {
   var data = props.data; // [{ category, amount }]
   var onCategoryClick = props.onCategoryClick; // optional: (category) => void
@@ -2519,6 +2548,22 @@ function shortMonthLabel(key) {
   var month = d.toLocaleDateString('en-GB', { month: 'short' });
   var yy = String(parts[0]).slice(2);
   return month + " '" + yy;
+}
+
+// Trims an ascending (oldest-first) array of month keys down to the
+// trailing 13 CALENDAR months counted back from today — the current month
+// plus the 12 before it. E.g. if today is July 2026, this keeps July 2025
+// through July 2026. The 13th month (rather than a round 12) is deliberate:
+// it puts the current month right alongside its counterpart from a year
+// ago, so a same-month-last-year comparison (this December vs last
+// December, say) is visible by default. Counting from today (not from "the
+// last month with data") keeps a chart's time axis meaning the same thing
+// every time someone looks at it, rather than silently shifting based on
+// upload recency.
+function limitToTrailing13Months(monthsAscendingArr) {
+  var now = new Date();
+  var cutoff = monthKey(new Date(now.getFullYear(), now.getMonth() - 12, 1).toISOString());
+  return monthsAscendingArr.filter(function (mk) { return mk >= cutoff; });
 }
 
 // --- Overview screen ------------------------------------------------------
@@ -3604,21 +3649,49 @@ function TrendsScreen(props) {
   var trendCategory = trendCategoryState[0], setTrendCategory = trendCategoryState[1];
   var incomeVsSpendFilterState = useState('both'); // 'both' | 'income' | 'spent'
   var incomeVsSpendFilter = incomeVsSpendFilterState[0], setIncomeVsSpendFilter = incomeVsSpendFilterState[1];
+  // Each trend chart has its OWN independent 12-months/all-time toggle
+  // (confirmed design — not a single switch for all four), since someone
+  // might want the full history on one chart (e.g. Balance over time) while
+  // keeping another zoomed to the recent trend. All four default to the
+  // trailing 12 months, since with years of history a chart showing every
+  // month at once becomes ineligible — data points get too cramped to read
+  // and month labels overlap.
+  var netRangeState = useState('1y'); // '1y' | 'all'
+  var netRange = netRangeState[0], setNetRange = netRangeState[1];
+  var incomeVsSpendRangeState = useState('1y');
+  var incomeVsSpendRange = incomeVsSpendRangeState[0], setIncomeVsSpendRange = incomeVsSpendRangeState[1];
+  var balanceRangeState = useState('1y');
+  var balanceRange = balanceRangeState[0], setBalanceRange = balanceRangeState[1];
+  var categoryRangeState = useState('1y');
+  var categoryRange = categoryRangeState[0], setCategoryRange = categoryRangeState[1];
+
+  var monthsAscendingForNet = useMemo(function () {
+    return netRange === '1y' ? limitToTrailing13Months(data.monthsAscending) : data.monthsAscending;
+  }, [data.monthsAscending, netRange]);
+  var monthsAscendingForIncomeVsSpend = useMemo(function () {
+    return incomeVsSpendRange === '1y' ? limitToTrailing13Months(data.monthsAscending) : data.monthsAscending;
+  }, [data.monthsAscending, incomeVsSpendRange]);
+  var monthsAscendingForBalance = useMemo(function () {
+    return balanceRange === '1y' ? limitToTrailing13Months(data.monthsAscending) : data.monthsAscending;
+  }, [data.monthsAscending, balanceRange]);
+  var monthsAscendingForCategory = useMemo(function () {
+    return categoryRange === '1y' ? limitToTrailing13Months(data.monthsAscending) : data.monthsAscending;
+  }, [data.monthsAscending, categoryRange]);
 
   var incomeVsExpenses = useMemo(function () {
-    var incomeSeries = { name: 'Income', color: 'var(--gain)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].income : 0 }; }) };
-    var spentSeries = { name: 'Spent', color: 'var(--loss)', values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }) };
+    var incomeSeries = { name: 'Income', color: 'var(--gain)', values: monthsAscendingForIncomeVsSpend.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].income : 0 }; }) };
+    var spentSeries = { name: 'Spent', color: 'var(--loss)', values: monthsAscendingForIncomeVsSpend.map(function (mk) { return { x: shortMonthLabel(mk), y: data.monthlyTotals[mk] ? data.monthlyTotals[mk].spent : 0 }; }) };
     if (incomeVsSpendFilter === 'income') return [incomeSeries];
     if (incomeVsSpendFilter === 'spent') return [spentSeries];
     return [incomeSeries, spentSeries];
-  }, [data.monthsAscending, data.monthlyTotals, incomeVsSpendFilter]);
+  }, [monthsAscendingForIncomeVsSpend, data.monthlyTotals, incomeVsSpendFilter]);
 
   var balanceTrend = useMemo(function () {
     return [{
       name: 'Balance', color: 'var(--accent2)',
-      values: data.monthsAscending.map(function (mk) { return { x: shortMonthLabel(mk), y: (data.monthlyTotals[mk] && data.monthlyTotals[mk].lastBalance !== null) ? data.monthlyTotals[mk].lastBalance : 0 }; }),
+      values: monthsAscendingForBalance.map(function (mk) { return { x: shortMonthLabel(mk), y: (data.monthlyTotals[mk] && data.monthlyTotals[mk].lastBalance !== null) ? data.monthlyTotals[mk].lastBalance : 0 }; }),
     }];
-  }, [data.monthsAscending, data.monthlyTotals]);
+  }, [monthsAscendingForBalance, data.monthlyTotals]);
 
   // Net = income minus spending for that month. Investments are already
   // excluded from "spending" elsewhere in the app, so this is the true cash
@@ -3627,12 +3700,12 @@ function TrendsScreen(props) {
   var monthlyNetTrend = useMemo(function () {
     return [{
       name: 'Net', color: 'var(--gain)',
-      values: data.monthsAscending.map(function (mk) {
+      values: monthsAscendingForNet.map(function (mk) {
         var t = data.monthlyTotals[mk];
         return { x: shortMonthLabel(mk), y: t ? t.income - t.spent : 0 };
       }),
     }];
-  }, [data.monthsAscending, data.monthlyTotals]);
+  }, [monthsAscendingForNet, data.monthlyTotals]);
 
   var activeTrendCategory = trendCategory || data.allCategoriesSeenBroad[0];
 
@@ -3678,14 +3751,14 @@ function TrendsScreen(props) {
     });
     return [{
       name: activeTrendCategory, color: colorForCategory(activeTrendCategory),
-      values: data.monthsAscending.map(function (mk) {
+      values: monthsAscendingForCategory.map(function (mk) {
         // Matches the donut chart's behavior: a category fully offset by
         // reimbursements that month shows as 0 here rather than a
         // negative trend value, which wouldn't mean anything visually.
         return { x: shortMonthLabel(mk), y: Math.max(0, sumsByMonth[mk] || 0) };
       }),
     }];
-  }, [data.monthsAscending, data.categorized, activeTrendCategory, activeTrendCategoryReal]);
+  }, [monthsAscendingForCategory, data.categorized, activeTrendCategory, activeTrendCategoryReal]);
 
   if (props.transactions.length === 0) {
     return h(EmptyState, { onFile: props.onAddFile, error: props.error });
@@ -3702,11 +3775,17 @@ function TrendsScreen(props) {
 
   return h('div', { className: 'screen' },
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Monthly net (income \u2212 spending)'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 } },
+        h('p', { className: 'section-title', style: { margin: 0 } }, 'Monthly net (income \u2212 spending)'),
+        h(RangeToggle, { value: netRange, onChange: setNetRange })
+      ),
       h(ToggleableChart, { series: monthlyNetTrend, colorBySign: { positive: 'var(--gain)', negative: 'var(--loss)' }, defaultType: 'bar' })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Income vs. spending'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 } },
+        h('p', { className: 'section-title', style: { margin: 0 } }, 'Income vs. spending'),
+        h(RangeToggle, { value: incomeVsSpendRange, onChange: setIncomeVsSpendRange })
+      ),
       h('div', { style: { display: 'flex', gap: 6, marginBottom: 12 } },
         [['both', 'Both'], ['income', 'Income'], ['spent', 'Spent']].map(function (opt) {
           return h('button', {
@@ -3726,11 +3805,17 @@ function TrendsScreen(props) {
       h(ToggleableChart, { series: incomeVsExpenses })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Balance over time'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 } },
+        h('p', { className: 'section-title', style: { margin: 0 } }, 'Balance over time'),
+        h(RangeToggle, { value: balanceRange, onChange: setBalanceRange })
+      ),
       h(ToggleableChart, { series: balanceTrend, colorBySign: { positive: 'var(--accent2)', negative: 'var(--loss)' } })
     ),
     h('div', { className: 'card', style: { marginBottom: 20 } },
-      h('p', { className: 'section-title' }, 'Category trend'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 } },
+        h('p', { className: 'section-title', style: { margin: 0 } }, 'Category trend'),
+        h(RangeToggle, { value: categoryRange, onChange: setCategoryRange })
+      ),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 } },
         data.allCategoriesSeenBroad.map(function (c) {
           return h('button', {
