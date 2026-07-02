@@ -9,7 +9,7 @@
 // is therefore identical to having no service worker at all; the cache
 // only ever shows up when offline, where it makes the app fully usable
 // (all data already lives in localStorage on the device).
-var CACHE_NAME = 'ledger-shell-v1';
+var CACHE_NAME = 'ledger-shell-v2';
 
 self.addEventListener('install', function (event) {
   self.skipWaiting();
@@ -31,7 +31,14 @@ self.addEventListener('activate', function (event) {
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
   event.respondWith(
-    fetch(event.request)
+    // cache: 'no-cache' forces revalidation with the server instead of
+    // trusting the browser's HTTP cache — GitHub Pages serves with a
+    // 10-minute max-age, and without this the "network" attempt could
+    // return (and then re-cache) a copy up to 10 minutes stale, defeating
+    // the whole point of network-first for a replace-and-reload update
+    // workflow. With ETag revalidation this stays cheap when nothing
+    // changed and immediate when something did.
+    fetch(event.request, { cache: 'no-cache' })
       .then(function (response) {
         // Keep the cached copy fresh with every successful network load,
         // so the offline fallback is always the last version actually used.

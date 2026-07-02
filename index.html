@@ -234,9 +234,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.1';
+var APP_VERSION = '1.28.2';
 
 var CHANGELOG = [
+  { version: '1.28.2', notes: [
+    'O service worker passa a revalidar sempre com o servidor em vez de confiar na cache HTTP do browser — o GitHub Pages guarda páginas em cache até 10 minutos, o que podia servir (e voltar a guardar) uma versão antiga logo após uma atualização.',
+    'O ecrã de erro mostra agora a versão da app, para ser sempre possível distinguir um bug novo de uma cópia antiga em cache.',
+  ]},
   { version: '1.28.1', notes: [
     'Corrigido o crash "mk.split" ao abrir a app num contexto sem dados (ex: a app instalada no ecrã inicial, que no iOS tem armazenamento separado do Safari): a app mostrava o ecrã de erro em vez do ecrã de upload. Agora arranca corretamente em qualquer contexto, com ou sem dados. Adicionado um teste de arranque completo da app (com e sem dados) que faltava na suite.',
   ]},
@@ -5980,7 +5984,7 @@ AppErrorBoundary.prototype.render = function () {
       h('p', { style: { marginBottom: 8, lineHeight: 1.5, color: 'var(--muted)' } },
         'Ledger hit an unexpected error. Your data is safe \u2014 it\u2019s stored locally on this device and isn\u2019t affected by this.'),
       h('p', { style: { marginBottom: 20, fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted)', wordBreak: 'break-word' } },
-        String(this.state.error && this.state.error.message || this.state.error)),
+        'v' + APP_VERSION + ' \u2014 ' + String(this.state.error && this.state.error.message || this.state.error)),
       h('button', {
         className: 'btn-primary',
         onClick: function () { location.reload(); },
