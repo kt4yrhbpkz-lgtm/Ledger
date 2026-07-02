@@ -232,9 +232,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.24';
+var APP_VERSION = '1.27.25';
 
 var CHANGELOG = [
+  { version: '1.27.25', notes: [
+    'Simplificação: removida a rede de segurança genérica que corrigia qualquer desvio de scroll horizontal, já que a causa real (o cabeçalho de "Transactions" a exceder a largura do ecrã) foi encontrada e corrigida diretamente. As correções de gestos que continuam válidas por si só (bloqueio de direção do gesto, botões a nunca disparar o gesto de mudar de mês) mantêm-se.',
+  ]},
   { version: '1.27.24', notes: [
     'Corrigido o cabeçalho fixo de "Transactions" no Resumo: quando havia um filtro ativo (com texto mais longo) ou muitos botões visíveis ao mesmo tempo (Date/Price, Credits, Clear, Select), o botão "Select" podia ficar cortado fora do ecrã. O título passa agora a ocupar sempre a sua própria linha, com os botões numa linha abaixo, sem nunca serem cortados.',
   ]},
@@ -5127,27 +5130,6 @@ function App() {
     el.addEventListener('scroll', onScroll, { passive: true });
     return function () { el.removeEventListener('scroll', onScroll); };
   }, [screen]);
-
-  // Final unconditional safety net: #main should NEVER have any horizontal
-  // scroll position other than 0. Every other fix elsewhere in this file
-  // for "the screen shifts sideways" targets a SPECIFIC confirmed gesture
-  // conflict (the donut chart's entrance animation restarting on tap, a
-  // button tap landing at the same moment as the month-swipe gesture,
-  // etc.) — each was found and fixed only after a real-device video showed
-  // that exact sequence, and there's no way to be certain every possible
-  // path to the same symptom has been found this way. This watchdog
-  // doesn't try to figure out why #main drifted sideways; it just snaps it
-  // straight back the instant it happens, on every scroll event, so even
-  // an as-yet-unidentified cause can't leave the page visibly shifted.
-  useEffect(function () {
-    var el = mainRef.current;
-    if (!el) return;
-    function snapBackHorizontal() {
-      if (el.scrollLeft !== 0) el.scrollLeft = 0;
-    }
-    el.addEventListener('scroll', snapBackHorizontal, { passive: true });
-    return function () { el.removeEventListener('scroll', snapBackHorizontal); };
-  }, []);
 
   useEffect(function () { setShowScrollTop(false); }, [screen]);
 
