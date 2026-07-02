@@ -232,9 +232,13 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.27.26';
+var APP_VERSION = '1.27.27';
 
 var CHANGELOG = [
+  { version: '1.27.27', notes: [
+    'O score de "Spending vs. usual" passa a comparar, no mês atual, o que já gastaste com o que costumas ter gasto no mesmo ponto do mês (o mesmo critério do gráfico de ritmo), em vez do total absoluto. Antes, um mês mal começado parecia sempre bom só porque o total ainda estava baixo; agora reflete corretamente se estás a gastar acima do ritmo habitual. Meses já terminados continuam a usar o total.',
+    'O gráfico "Spending pace vs. average" mostra agora datas reais no eixo horizontal (ex: "5 Jul") em vez de percentagens. Os cálculos são exatamente os mesmos, só as etiquetas mudaram.',
+  ]},
   { version: '1.27.26', notes: [
     'Os gráficos de Trends passam a mostrar por defeito só os últimos 13 meses (o ano anterior mais o mês atual), para que possas comparar cada mês com o seu homólogo do ano passado (ex: Natal com Natal). Cada gráfico tem o seu próprio botão "1Y / All" junto ao título, para expandires ao histórico completo quando quiseres. Isto evita que os gráficos fiquem ilegíveis à medida que acumulas anos de dados.',
   ]},
@@ -2704,7 +2708,7 @@ function scoreFactorFromPercent(pct, floorPct, ceilPct) {
 // 0.425 normalize to 50%/50%), rather than introducing some other split.
 var SCORE_FACTOR_WEIGHTS = { netPositive: 0.425, balanceGrowth: 0.15, spendingVsAverage: 0.425 };
 
-function computeMonthlyScore(categorized, monthlyTotals, mk) {
+function computeMonthlyScore(categorized, monthlyTotals, mk, today) {
   var currentMetrics = summaryMetricsForMonth(categorized, mk);
   if (!currentMetrics.hasAnyData) return null;
 
@@ -2737,9 +2741,36 @@ function computeMonthlyScore(categorized, monthlyTotals, mk) {
   if (balanceGrowthScore !== null) factors.push({ key: 'balanceGrowth', score: balanceGrowthScore, value: balanceGrowthPct, weight: SCORE_FACTOR_WEIGHTS.balanceGrowth });
 
   var trailingAvg = trailing12MonthAverage(categorized, mk);
-  var spendingVsAvgPct = trailingAvg.hasAnyData && trailingAvg.totalSpent > 0
-    ? (currentMetrics.totalSpent / trailingAvg.totalSpent) * 100
-    : null;
+  // In the CURRENT, still-in-progress month, comparing this month's
+  // partial total against full-month averages would be misleading: early
+  // in the month the total is naturally low, so it would always look
+  // "good" even while spending is actually running ahead of pace for this
+  // point in the month. So for the current month, compare spending-so-far
+  // against the historical average AT THE SAME POINT of the month — the
+  // exact same pace-adjusted basis the "Spending pace vs. average" chart
+  // uses. For past (already-complete) months, the simple full-total ratio
+  // is correct and the two approaches converge anyway.
+  var todayMonthKey = today ? (today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0')) : null;
+  var isCurrentRealMonth = todayMonthKey !== null && mk === todayMonthKey;
+  var spendingVsAvgPct = null;
+  if (isCurrentRealMonth) {
+    var pace = spendingPaceComparison(categorized, mk, today);
+    if (pace && pace.current.length > 0) {
+      var spentSoFar = pace.current[pace.current.length - 1];
+      var avgAtThisPoint = pace.average[pace.average.length - 1];
+      // Early in the month the only elapsed checkpoint may be 0% (where
+      // cumulative spend is 0 by definition), which can't give a real
+      // ratio. Only use the pace-based comparison once there's a point
+      // with a positive historical average to divide by; otherwise fall
+      // through to the full-total comparison below.
+      if (avgAtThisPoint > 0) spendingVsAvgPct = (spentSoFar / avgAtThisPoint) * 100;
+    }
+  }
+  if (spendingVsAvgPct === null) {
+    spendingVsAvgPct = trailingAvg.hasAnyData && trailingAvg.totalSpent > 0
+      ? (currentMetrics.totalSpent / trailingAvg.totalSpent) * 100
+      : null;
+  }
   // Inverted floor/ceiling on purpose: LOWER spending is better, so 100%
   // (spent exactly the average) scores 0 and 50% (spent half the average)
   // scores full — scoreFactorFromPercent's "higher is better" shape is
@@ -2851,6 +2882,8 @@ function spendingPaceComparison(categorized, mk, today) {
     average: checkpointsSoFar.map(function (pct) { return avgCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
     monthsWithData: priorCurves.length,
     elapsedPct: elapsedPct,
+    mk: mk,
+    totalDays: totalDays,
   };
 }
 
@@ -2943,14 +2976,26 @@ function SpendingPaceChart(props) {
   var pace = props.pace;
   if (!pace) return null;
 
+  // Turns a "percent of the month elapsed" checkpoint into the actual
+  // calendar date it corresponds to (e.g. 16% of a 31-day July -> "5 Jul"),
+  // using the same pct->day mapping the cumulative-spending curve uses, so
+  // the axis lines up exactly with the data. Only the labels change here;
+  // all the pace math upstream is untouched.
+  function dateLabelForPct(pct) {
+    var parts = pace.mk.split('-').map(Number);
+    var day = Math.max(1, Math.round((pct / 100) * pace.totalDays));
+    var d = new Date(parts[0], parts[1] - 1, day);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
   var series = [
     {
       name: 'This month', color: 'var(--loss)',
-      values: pace.checkpoints.map(function (pct, i) { return { x: pct + '%', y: pace.current[i] }; }),
+      values: pace.checkpoints.map(function (pct, i) { return { x: dateLabelForPct(pct), y: pace.current[i] }; }),
     },
     {
       name: 'Avg (' + pace.monthsWithData + 'mo)', color: 'var(--muted)',
-      values: pace.checkpoints.map(function (pct, i) { return { x: pct + '%', y: pace.average[i] }; }),
+      values: pace.checkpoints.map(function (pct, i) { return { x: dateLabelForPct(pct), y: pace.average[i] }; }),
     },
   ];
 
@@ -3218,7 +3263,7 @@ function OverviewScreen(props) {
   }, [data.categorized, activeMonth]);
 
   var monthlyScore = useMemo(function () {
-    return computeMonthlyScore(data.categorized, data.monthlyTotals, activeMonth);
+    return computeMonthlyScore(data.categorized, data.monthlyTotals, activeMonth, new Date());
   }, [data.categorized, data.monthlyTotals, activeMonth]);
   var scoreDetailOpenState = useState(false);
   var scoreDetailOpen = scoreDetailOpenState[0], setScoreDetailOpen = scoreDetailOpenState[1];
@@ -3418,9 +3463,11 @@ function OverviewScreen(props) {
       },
         h('div', { style: { color: 'var(--muted)', marginBottom: 2 } }, 'Score this month \u2014 average of:'),
         monthlyScore.factors.map(function (f) {
+          var nowMk = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+          var isCurrentMonth = activeMonth === nowMk;
           var label = f.key === 'netPositive' ? 'Net positive (left of income)'
             : f.key === 'balanceGrowth' ? 'Balance growth (vs. income)'
-            : 'Spending vs. usual (12-month avg)';
+            : isCurrentMonth ? 'Spending vs. usual pace (this point in month)' : 'Spending vs. usual (12-month avg)';
           // For netPositive/balanceGrowth, a higher number is better (more
           // left over, more saved) — shown in the gain color. For
           // spendingVsAverage the sense flips: a higher number means MORE
@@ -3437,7 +3484,9 @@ function OverviewScreen(props) {
           );
         }),
         h('div', { style: { color: 'var(--muted)', fontSize: 11, marginTop: 2, lineHeight: 1.4 } },
-          'Spending vs. usual: 0% means you spent exactly your typical amount; negative means you spent less than usual (good), positive means more (worse).'),
+          (activeMonth === (new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0')))
+            ? 'Spending vs. usual pace: compares what you\u2019ve spent so far this month against what you\u2019d typically have spent by this same point in the month \u2014 so it stays fair early in the month. 0% means right on your usual pace; negative means below it (good), positive means ahead of it (worse).'
+            : 'Spending vs. usual: 0% means you spent exactly your typical amount; negative means you spent less than usual (good), positive means more (worse).'),
         monthlyScore.balanceGrowthExcludedByInvesting ? h('div', { style: { color: 'var(--muted)', fontSize: 11, lineHeight: 1.4 } },
           'Balance growth skipped this month \u2014 your account balance dropped, but the amount you invested covers the drop, so it isn\u2019t counted against you.') : null,
         (monthlyScore.factors.length < 3 && !monthlyScore.balanceGrowthExcludedByInvesting) ? h('div', { style: { color: 'var(--muted)', fontSize: 11 } },
