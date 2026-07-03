@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.3';
+var APP_VERSION = '1.28.4';
 
 var CHANGELOG = [
+  { version: '1.28.4', notes: [
+    'Corrigido um crash ao arrastar o dedo sobre o gráfico "Spending pace vs. average" além do dia de hoje (na zona onde só a linha da média já tem dados) — introduzido na versão anterior. A app deixa agora corretamente essa série de fora do balão de valores nesse ponto, em vez de rebentar.',
+  ]},
   { version: '1.28.3', notes: [
     'A barra de navegação em baixo aproxima-se mais do fundo do ecrã, em vez de ficar centrada entre o topo da barra e a faixa de gestos do iPhone.',
     'O gráfico "Spending pace vs. average" mostra agora a linha da média sempre até ao fim do mês, mesmo estando ainda no início do mês — a tua linha ("This month") continua a parar em hoje, mas a linha cinzenta dá-te uma referência visual de onde o mês costuma acabar.',
@@ -1816,7 +1819,14 @@ function LineChart(props) {
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
       seriesData.map(function (sd, si) {
-        var val = series[si].values[activeIdx].y;
+        // A series can be shorter than the shared axis (e.g. "This month"
+        // stopping at today while "Avg" continues to month-end) — when the
+        // touched point is past this series' own last value, there's
+        // genuinely nothing to show for it here, so it's omitted from the
+        // tooltip rather than crashing on an out-of-range lookup.
+        var point = series[si].values[activeIdx];
+        if (!point) return null;
+        var val = point.y;
         var dotColor = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : sd.color;
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: dotColor, display: 'inline-block', flexShrink: 0 } }),
@@ -1984,7 +1994,9 @@ function TimeSeriesBarChart(props) {
     },
       h('div', { style: { color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 4 } }, labels[activeIdx]),
       series.map(function (s, si) {
-        var val = s.values[activeIdx].y;
+        var point = s.values[activeIdx];
+        if (!point) return null;
+        var val = point.y;
         var color = colorBySign ? (val < 0 ? colorBySign.negative : colorBySign.positive) : (s.color || CHART_COLORS[si % CHART_COLORS.length]);
         return h('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: color, display: 'inline-block', flexShrink: 0 } }),
