@@ -56,7 +56,7 @@
   --mono: 'IBM Plex Mono', monospace;
   --serif: 'Source Serif 4', Georgia, serif;
   --sans: 'Inter', -apple-system, sans-serif;
-  --nav-h: 58px;
+  --nav-h: 46px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -120,9 +120,9 @@ button { font-family: var(--sans); }
   display: flex; z-index: 10;
 }
 .nav-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; border: none; background: none; color: var(--muted); font-size: 9px; font-weight: 500; cursor: pointer;
-  transition: color 0.15s; padding-bottom: 6px;
+  transition: color 0.15s;
 }
 .nav-item .icon { font-size: 18px; line-height: 1; transition: transform 0.15s; }
 .nav-item.active { color: var(--accent); }
@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.4';
+var APP_VERSION = '1.28.5';
 
 var CHANGELOG = [
+  { version: '1.28.5', notes: [
+    'Nova tentativa de aproximar a barra de navegação do fundo do ecrã — a correção anterior só reposicionava os ícones dentro de uma barra desnecessariamente alta; desta vez a própria barra ficou mais baixa, confirmado com medição real (não só visual) de que já não sobra espaço vazio.',
+  ]},
   { version: '1.28.4', notes: [
     'Corrigido um crash ao arrastar o dedo sobre o gráfico "Spending pace vs. average" além do dia de hoje (na zona onde só a linha da média já tem dados) — introduzido na versão anterior. A app deixa agora corretamente essa série de fora do balão de valores nesse ponto, em vez de rebentar.',
   ]},
