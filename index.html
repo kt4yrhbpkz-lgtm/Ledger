@@ -185,7 +185,7 @@ button { font-family: var(--sans); }
    someone's shoulder. user-select:none stops a screenshot+zoom or a
    text-select from defeating the blur. */
 .privacy-blur {
-  filter: blur(6px);
+  filter: blur(14px);
   user-select: none;
   -webkit-user-select: none;
   transition: filter 0.2s;
@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.5';
+var APP_VERSION = '1.28.6';
 
 var CHANGELOG = [
+  { version: '1.28.6', notes: [
+    'O desfoque do modo de privacidade ficou muito mais forte — os números ainda davam para adivinhar antes, especialmente nos valores maiores.',
+  ]},
   { version: '1.28.5', notes: [
     'Nova tentativa de aproximar a barra de navegação do fundo do ecrã — a correção anterior só reposicionava os ícones dentro de uma barra desnecessariamente alta; desta vez a própria barra ficou mais baixa, confirmado com medição real (não só visual) de que já não sobra espaço vazio.',
   ]},
