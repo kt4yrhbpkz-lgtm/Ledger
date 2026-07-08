@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.6';
+var APP_VERSION = '1.28.7';
 
 var CHANGELOG = [
+  { version: '1.28.7', notes: [
+    'Corrigido o semáforo N/B/S do score: a letra "S" (spending) podia aparecer vermelha mesmo com uma percentagem negativa (ritmo de gastos abaixo do habitual, portanto bom) — a cor e o texto explicativo já não concordavam entre si. A cor reflete agora exatamente o mesmo valor que o texto mostra.',
+  ]},
   { version: '1.28.6', notes: [
     'O desfoque do modo de privacidade ficou muito mais forte — os números ainda davam para adivinhar antes, especialmente nos valores maiores.',
   ]},
@@ -2841,20 +2844,21 @@ function computeMonthlyScore(categorized, monthlyTotals, mk, today) {
       ? (currentMetrics.totalSpent / trailingAvg.totalSpent) * 100
       : null;
   }
-  // Inverted floor/ceiling on purpose: LOWER spending is better, so 100%
-  // (spent exactly the average) scores 0 and 50% (spent half the average)
-  // scores full — scoreFactorFromPercent's "higher is better" shape is
-  // applied to (200 - pct) to flip it without writing a second function.
-  var spendingScore = spendingVsAvgPct !== null ? scoreFactorFromPercent(200 - spendingVsAvgPct, 100, 150) : null;
-  // The displayed value is the variance from average (0% = spent exactly
-  // the average, -50% = spent half, +50% = spent 1.5x) — NOT the raw ratio
-  // used for scoring above. Showing the raw ratio with a "+" sign in front
-  // would misleadingly read as "150% above average" when it actually means
-  // "1.5x average" (i.e. 50% above) — this keeps the displayed number
-  // consistent with how the other two factors are shown (a true
-  // percentage change), even though the underlying ratio is used for the
-  // actual 0-1 scoring math just above.
-  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: spendingVsAvgPct - 100, weight: SCORE_FACTOR_WEIGHTS.spendingVsAverage });
+  // Scored directly from the DISPLAYED variance (0% = spent exactly the
+  // usual amount, -50% = spent half, +50% = spent 1.5x) rather than the
+  // raw ratio, so the score always matches what's shown on screen. A
+  // previous version scored off a differently-shaped expression than the
+  // one displayed, which could produce a red/bad score for a genuinely
+  // good (negative, under-pace) percentage — e.g. -5% under pace scored
+  // as if it were 105% of average, nearly the worst possible score,
+  // exactly backwards from "spending less than usual is good".
+  // -50% or better (spent half of usual or less) scores full; +25% or
+  // worse (spending a quarter more than usual) scores zero — an
+  // intentionally asymmetric band, since overspending should be
+  // penalized faster than underspending is rewarded.
+  var displayedSpendingPct = spendingVsAvgPct !== null ? spendingVsAvgPct - 100 : null;
+  var spendingScore = displayedSpendingPct !== null ? scoreFactorFromPercent(-displayedSpendingPct, -25, 50) : null;
+  if (spendingScore !== null) factors.push({ key: 'spendingVsAverage', score: spendingScore, value: displayedSpendingPct, weight: SCORE_FACTOR_WEIGHTS.spendingVsAverage });
 
   if (factors.length === 0) return null;
 
