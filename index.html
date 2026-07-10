@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.7';
+var APP_VERSION = '1.28.8';
 
 var CHANGELOG = [
+  { version: '1.28.8', notes: [
+    'Descrições de transações demasiado longas para caberem numa linha (cortadas com "…") mostram agora o texto completo ao tocar na transação, no mesmo painel onde já escolhes a categoria.',
+  ]},
   { version: '1.28.7', notes: [
     'Corrigido o semáforo N/B/S do score: a letra "S" (spending) podia aparecer vermelha mesmo com uma percentagem negativa (ritmo de gastos abaixo do habitual, portanto bom) — a cor e o texto explicativo já não concordavam entre si. A cor reflete agora exatamente o mesmo valor que o texto mostra.',
   ]},
