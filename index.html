@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.8';
+var APP_VERSION = '1.28.9';
 
 var CHANGELOG = [
+  { version: '1.28.9', notes: [
+    'Corrigido: a descrição completa ao tocar numa transação não aparecia sempre, porque a app tentava adivinhar se o texto tinha sido cortado com base no número de caracteres — no teu ecrã, mesmo descrições curtas já ficavam cortadas. A descrição completa aparece agora sempre, sem depender dessa adivinha.',
+  ]},
   { version: '1.28.8', notes: [
     'Descrições de transações demasiado longas para caberem numa linha (cortadas com "…") mostram agora o texto completo ao tocar na transação, no mesmo painel onde já escolhes a categoria.',
   ]},
@@ -1552,13 +1555,18 @@ function TransactionRow(props) {
     editing ? h('div', { style: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 } },
       // The row above clips long descriptions with an ellipsis (no room to
       // show them in full on one line) — a title="" tooltip doesn't help on
-      // a touch device, since there's no hover. Repeating the full text
-      // here, only when it was actually long enough to have been clipped,
-      // is the tap-friendly equivalent: no separate popup needed, since
-      // this panel already opens on the same tap.
-      tx.description.length > 40 ? h('div', {
+      // a touch device, since there's no hover. Always showing the full
+      // description here (rather than guessing from its character count
+      // whether it was actually clipped) is what's reliable: a length
+      // threshold can't account for the real column width or font size on
+      // any given device, and a real-device report showed even a 21-char
+      // description getting clipped, well under a threshold that assumed
+      // more room than actually exists. The only cost of always showing it
+      // is one harmless repeated line on the (common) case where the row
+      // above already fit the whole description.
+      h('div', {
         style: { fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, wordBreak: 'break-word' },
-      }, tx.description) : null,
+      }, tx.description),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
       categories.map(function (c) {
         return h('button', {
