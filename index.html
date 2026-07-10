@@ -1546,7 +1546,17 @@ function TransactionRow(props) {
       onClick: openNoteEditor,
       style: { marginTop: 6, fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', cursor: 'pointer', paddingLeft: 70 },
     }, '\u201c' + note + '\u201d') : null,
-    editing ? h('div', { style: { marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 } },
+    editing ? h('div', { style: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 } },
+      // The row above clips long descriptions with an ellipsis (no room to
+      // show them in full on one line) — a title="" tooltip doesn't help on
+      // a touch device, since there's no hover. Repeating the full text
+      // here, only when it was actually long enough to have been clipped,
+      // is the tap-friendly equivalent: no separate popup needed, since
+      // this panel already opens on the same tap.
+      tx.description.length > 40 ? h('div', {
+        style: { fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, wordBreak: 'break-word' },
+      }, tx.description) : null,
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
       categories.map(function (c) {
         return h('button', {
           key: c,
@@ -1581,6 +1591,7 @@ function TransactionRow(props) {
           border: '1px dashed var(--accent2)', background: 'transparent', color: 'var(--accent2)', cursor: 'pointer',
         },
       }, '\ud83d\udcc5 Move to month') : null
+      )
     ) : null,
     (editing && creating) ? h('div', { style: { marginTop: 8, display: 'flex', gap: 6 } },
       h('input', {
