@@ -234,9 +234,12 @@ var useEffect = React.useEffect;
 // CHANGELOG below. The update-check banner compares this string against
 // whatever is live at the same URL — it never touches localStorage, so a
 // reload triggered from the banner can't lose saved transactions.
-var APP_VERSION = '1.28.9';
+var APP_VERSION = '1.28.10';
 
 var CHANGELOG = [
+  { version: '1.28.10', notes: [
+    'O gráfico "Spending pace vs. average" tinha pontos de 5 em 5% do mês, o que podia deixar o último ponto 1-2 dias atrás de hoje, parecendo contradizer o valor "Spent" do resumo (que é sempre exato). A linha "This month" ganha agora sempre um ponto extra no dia de hoje, com o valor mais atual gasto.',
+  ]},
   { version: '1.28.9', notes: [
     'Corrigido: a descrição completa ao tocar numa transação não aparecia sempre, porque a app tentava adivinhar se o texto tinha sido cortado com base no número de caracteres — no teu ecrã, mesmo descrições curtas já ficavam cortadas. A descrição completa aparece agora sempre, sem depender dessa adivinha.',
   ]},
@@ -2955,8 +2958,39 @@ function spendingPaceComparison(categorized, mk, today) {
   // — for the current month that's "today"; for a past month it's the
   // whole 0-100% range, since the entire month already happened.
   var checkpointsSoFar = PACE_CHECKPOINTS.filter(function (pct) { return pct <= elapsedPct; });
+  // The 5%-of-month step size keeps the chart from having a cluttered
+  // point-per-day axis, but it means the LAST checkpoint can fall a day or
+  // two behind today (e.g. day 17 of a 31-day month rounds down to the 50%
+  // checkpoint, which is day 16) — while "Spent" elsewhere in the app is
+  // always exact as of right now. A real-device report showed this as a
+  // real discrepancy: "Spent" already included today's transactions while
+  // the chart's most recent point didn't yet. Adding elapsedPct itself as
+  // one extra checkpoint (only for the current month, and only if it's not
+  // already exactly on a 5% step) closes that gap — "This month" always
+  // ends at today's real total, without changing the 5%-step granularity
+  // everywhere else on the curve.
+  if (isCurrentRealMonth && checkpointsSoFar[checkpointsSoFar.length - 1] !== elapsedPct) {
+    checkpointsSoFar = checkpointsSoFar.concat([elapsedPct]);
+  }
 
   var currentCurve = cumulativeSpendingCurve(categorized, mk);
+  // currentCurve is only defined at the fixed 5%-step checkpoints — for the
+  // synthetic "today" point just added, its cumulative spend is computed
+  // directly from the day-of-month, matching exactly what "Spent" shows.
+  function currentValueAtPct(pct) {
+    var idx = PACE_CHECKPOINTS.indexOf(pct);
+    if (idx !== -1) return currentCurve[idx];
+    var dayCursor = Math.round((pct / 100) * totalDays);
+    var running = 0;
+    categorized.forEach(function (tx) {
+      if (tx.effectiveMonthKey !== mk) return;
+      var day = Number(tx.dateMov.slice(8, 10));
+      if (day > dayCursor) return;
+      if (isSpending(tx)) running += Math.abs(tx.amount);
+      else if (isReimbursement(tx)) running -= tx.amount;
+    });
+    return Math.max(0, running);
+  }
 
   var priorCurves = [];
   var cursor = mk;
@@ -2973,10 +3007,45 @@ function spendingPaceComparison(categorized, mk, today) {
     return sum / priorCurves.length;
   });
 
+  var fullMonthCheckpoints = PACE_CHECKPOINTS;
+  var fullMonthAverage = avgCurve;
+  if (isCurrentRealMonth && checkpointsSoFar.indexOf(elapsedPct) !== -1 && PACE_CHECKPOINTS.indexOf(elapsedPct) === -1) {
+    // The synthetic "today" point needs to be inserted into the FULL
+    // shared checkpoint list too (in its correct sorted position), not
+    // just into checkpointsSoFar above — the chart positions every
+    // series' points by INDEX into this shared list, so if "This month"
+    // has an extra point that isn't also reflected here at the right
+    // spot, that point would render at the wrong place along the axis.
+    var insertAt = PACE_CHECKPOINTS.findIndex(function (pct) { return pct > elapsedPct; });
+    if (insertAt === -1) insertAt = PACE_CHECKPOINTS.length;
+    var lowerPct2 = Math.floor(elapsedPct / 5) * 5;
+    var upperPct2 = lowerPct2 + 5;
+    var lowerIdx2 = PACE_CHECKPOINTS.indexOf(lowerPct2);
+    var upperIdx2 = PACE_CHECKPOINTS.indexOf(upperPct2);
+    var interpolatedAvg = upperIdx2 === -1 ? avgCurve[lowerIdx2]
+      : avgCurve[lowerIdx2] + (avgCurve[upperIdx2] - avgCurve[lowerIdx2]) * ((elapsedPct - lowerPct2) / 5);
+    fullMonthCheckpoints = PACE_CHECKPOINTS.slice(0, insertAt).concat([elapsedPct], PACE_CHECKPOINTS.slice(insertAt));
+    fullMonthAverage = avgCurve.slice(0, insertAt).concat([interpolatedAvg], avgCurve.slice(insertAt));
+  }
+
   return {
     checkpoints: checkpointsSoFar,
-    current: checkpointsSoFar.map(function (pct) { return currentCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
-    average: checkpointsSoFar.map(function (pct) { return avgCurve[PACE_CHECKPOINTS.indexOf(pct)]; }),
+    current: checkpointsSoFar.map(function (pct) { return currentValueAtPct(pct); }),
+    average: checkpointsSoFar.map(function (pct) {
+      var idx = PACE_CHECKPOINTS.indexOf(pct);
+      if (idx !== -1) return avgCurve[idx];
+      // The synthetic "today" point falls between two 5%-step checkpoints
+      // — the historical average has no finer-grained data than that, so
+      // linear interpolation between the two surrounding checkpoints is
+      // the closest reasonable estimate for this exact point in the month.
+      var lowerPct = Math.floor(pct / 5) * 5;
+      var upperPct = lowerPct + 5;
+      var lowerIdx = PACE_CHECKPOINTS.indexOf(lowerPct);
+      var upperIdx = PACE_CHECKPOINTS.indexOf(upperPct);
+      if (upperIdx === -1) return avgCurve[lowerIdx];
+      var frac = (pct - lowerPct) / 5;
+      return avgCurve[lowerIdx] + (avgCurve[upperIdx] - avgCurve[lowerIdx]) * frac;
+    }),
     // The average across the WHOLE month (all 21 checkpoints, 0-100%),
     // regardless of how much of the month has actually elapsed — shown on
     // the chart as a reference for "this is what the full month usually
@@ -2985,8 +3054,8 @@ function spendingPaceComparison(categorized, mk, today) {
     // still what the headline "X% ahead/behind" comparison text uses,
     // since comparing against a full-month average this early would be a
     // different (and less immediately actionable) question.
-    fullMonthCheckpoints: PACE_CHECKPOINTS,
-    fullMonthAverage: avgCurve,
+    fullMonthCheckpoints: fullMonthCheckpoints,
+    fullMonthAverage: fullMonthAverage,
     monthsWithData: priorCurves.length,
     elapsedPct: elapsedPct,
     mk: mk,
